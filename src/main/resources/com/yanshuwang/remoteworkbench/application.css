@@ -1,0 +1,152 @@
+.root {
+    -fx-font-family: "SF Pro Display", "Helvetica Neue", sans-serif;
+    -fx-font-size: 13px;
+    -fx-text-fill: #e8e9ed;
+    -fx-background-color: #1f2024;
+}
+
+.app-root {
+    -fx-background-color: #1f2024;
+}
+
+.top-bar {
+    -fx-padding: 13px 18px;
+    -fx-background-color: #292b31;
+    -fx-border-color: #3a3d45;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.brand-label {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f4f5f7;
+}
+
+.subtitle-label,
+.status-muted {
+    -fx-text-fill: #8f949f;
+}
+
+.sidebar {
+    -fx-background-color: #25272c;
+    -fx-border-color: #3a3d45;
+    -fx-border-width: 0 1px 0 0;
+}
+
+.section-label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #8f949f;
+}
+
+.sidebar-action,
+.secondary-button {
+    -fx-background-color: #353840;
+    -fx-text-fill: #e8e9ed;
+    -fx-background-radius: 5px;
+    -fx-border-color: #484b55;
+    -fx-border-radius: 5px;
+    -fx-padding: 8px 12px;
+}
+
+.sidebar-action:hover,
+.secondary-button:hover {
+    -fx-background-color: #41444e;
+}
+
+.primary-button {
+    -fx-background-color: #4c82e8;
+    -fx-text-fill: white;
+    -fx-background-radius: 5px;
+    -fx-padding: 8px 14px;
+    -fx-font-weight: bold;
+}
+
+.primary-button:hover {
+    -fx-background-color: #5b8ff0;
+}
+
+.connection-list,
+.connection-list .list-cell {
+    -fx-background-color: transparent;
+}
+
+.connection-list .list-cell {
+    -fx-padding: 10px 8px;
+    -fx-background-radius: 5px;
+}
+
+.connection-list .list-cell:filled:hover {
+    -fx-background-color: #30333a;
+}
+
+.connection-list .list-cell:filled:selected {
+    -fx-background-color: #354e78;
+}
+
+.connection-name {
+    -fx-font-weight: bold;
+    -fx-text-fill: #e8e9ed;
+}
+
+.connection-address {
+    -fx-font-size: 11px;
+    -fx-text-fill: #8f949f;
+}
+
+.workspace-overview {
+    -fx-background-color: #1f2024;
+}
+
+.workspace-tabs {
+    -fx-background-color: #1f2024;
+}
+
+.workspace-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f4f5f7;
+}
+
+.workspace-description {
+    -fx-text-fill: #9ca1ac;
+    -fx-text-alignment: center;
+}
+
+.welcome-card {
+    -fx-padding: 32px;
+    -fx-background-color: #292b31;
+    -fx-background-radius: 10px;
+    -fx-border-color: #3a3d45;
+    -fx-border-radius: 10px;
+}
+
+.status-bar {
+    -fx-padding: 7px 14px;
+    -fx-background-color: #292b31;
+    -fx-border-color: #3a3d45;
+    -fx-border-width: 1px 0 0 0;
+    -fx-text-fill: #aeb3bd;
+}
+
+.dialog-pane {
+    -fx-background-color: #292b31;
+}
+
+.dialog-pane .label {
+    -fx-text-fill: #e8e9ed;
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: #292b31;
+}
+
+.text-field,
+.spinner,
+.spinner .text-field {
+    -fx-background-color: #1f2024;
+    -fx-text-fill: #e8e9ed;
+    -fx-prompt-text-fill: #6f7480;
+    -fx-border-color: #484b55;
+    -fx-border-radius: 4px;
+}
