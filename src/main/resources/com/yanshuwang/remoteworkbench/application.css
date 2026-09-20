@@ -98,8 +98,27 @@
     -fx-background-color: #1f2024;
 }
 
-.workspace-tabs {
+.workspace-split {
     -fx-background-color: #1f2024;
+}
+
+.workspace-split .split-pane-divider {
+    -fx-background-color: #7183a0;
+    -fx-background-insets: 0;
+    -fx-border-color: #c2d0e5;
+    -fx-border-width: 0 1px;
+    -fx-padding: 0 1px;
+}
+
+.workspace-split .split-pane-divider:hover {
+    -fx-background-color: #6ea1f5;
+    -fx-border-color: #e5edff;
+}
+
+.workspace-split-horizontal .split-pane-divider {
+    -fx-cursor: ew-resize;
+    -fx-border-width: 0 1px;
+    -fx-padding: 0 1px;
 }
 
 .workspace-title {
@@ -119,6 +138,15 @@
     -fx-background-radius: 10px;
     -fx-border-color: #3a3d45;
     -fx-border-radius: 10px;
+}
+
+.terminal-panel {
+    -fx-background-color: #292b31;
+    -fx-background-radius: 10px;
+    -fx-border-color: #3a3d45;
+    -fx-border-width: 1px;
+    -fx-border-radius: 10px;
+    -fx-padding: 10px;
 }
 
 .status-bar {
@@ -149,4 +177,50 @@
     -fx-prompt-text-fill: #6f7480;
     -fx-border-color: #484b55;
     -fx-border-radius: 4px;
+}
+
+.combo-box-base {
+    -fx-background-color: #1f2024;
+    -fx-border-color: #484b55;
+    -fx-border-radius: 4px;
+}
+
+.combo-box .list-cell {
+    -fx-background-color: #1f2024;
+    -fx-text-fill: #e8e9ed;
+}
+
+.terminal-output {
+    -fx-control-inner-background: #17181b;
+    -fx-background-color: #17181b;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-text-fill: #f4f7ff;
+    -fx-font-family: "PingFang SC", "PingFang TC", sans-serif;
+    -fx-font-size: 14px;
+    -fx-highlight-fill: #354e78;
+    -fx-display-caret: true;
+}
+
+.terminal-output .content {
+    -fx-background-color: #17181b;
+    -fx-background-radius: 6px;
+}
+
+.terminal-output .viewport,
+.terminal-output .scroll-pane {
+    -fx-background-color: #17181b;
+}
+
+.terminal-output .text {
+    -fx-fill: #f4f7ff;
+    -fx-effect: dropshadow(gaussian, rgba(116, 166, 255, 0.45), 3, 0.25, 0, 0);
+}
+
+.terminal-output .caret {
+    -fx-stroke: #f4f7ff;
+    -fx-stroke-width: 3px;
+    -fx-fill: #f4f7ff;
+    -fx-effect: dropshadow(gaussian, rgba(120, 170, 255, 0.75), 5, 0.25, 0, 0);
 }
