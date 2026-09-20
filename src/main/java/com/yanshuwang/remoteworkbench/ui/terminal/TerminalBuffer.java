@@ -358,15 +358,60 @@ public final class TerminalBuffer {
         if (theme == null) {
             return;
         }
-        Color oldDefaultBg = this.defaultBg;
         this.defaultFg = theme.foreground();
         this.defaultBg = theme.background();
-        if (this.currentFg == null || this.currentFg.equals(TerminalColor.DEFAULT_FOREGROUND)) {
-            this.currentFg = this.defaultFg;
+        this.currentFg = this.defaultFg;
+        this.currentBg = this.defaultBg;
+
+        if (primaryGrid != null) {
+            updateGridTheme(primaryGrid);
         }
-        if (this.currentBg == null || this.currentBg.equals(oldDefaultBg) || this.currentBg.equals(TerminalColor.DEFAULT_BACKGROUND)) {
-            this.currentBg = this.defaultBg;
+        if (alternateGrid != null) {
+            updateGridTheme(alternateGrid);
         }
+        for (TerminalCell[] row : scrollback) {
+            updateRowTheme(row);
+        }
+    }
+
+    private void updateGridTheme(TerminalCell[][] targetGrid) {
+        if (targetGrid == null) return;
+        for (TerminalCell[] row : targetGrid) {
+            updateRowTheme(row);
+        }
+    }
+
+    private void updateRowTheme(TerminalCell[] row) {
+        if (row == null) return;
+        for (TerminalCell cell : row) {
+            if (cell == null) continue;
+            Color bg = cell.getBackground();
+            Color fg = cell.getForeground();
+            if (bg == null || isKnownDefaultBackground(bg)) {
+                cell.setBackground(this.defaultBg);
+            }
+            if (fg == null || isKnownDefaultForeground(fg)) {
+                cell.setForeground(this.defaultFg);
+            }
+        }
+    }
+
+    private static boolean isKnownDefaultBackground(Color c) {
+        if (c == null) return true;
+        if (TerminalColor.DEFAULT_BACKGROUND.equals(c)) return true;
+        for (TerminalTheme th : TerminalTheme.getAllThemes()) {
+            if (th.background().equals(c)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isKnownDefaultForeground(Color c) {
+        if (c == null) return true;
+        if (TerminalColor.DEFAULT_FOREGROUND.equals(c)) return true;
+        for (TerminalTheme th : TerminalTheme.getAllThemes()) {
+            if (th.foreground().equals(c)) return true;
+        }
+        return false;
     }
 
     public Color getDefaultFg() {

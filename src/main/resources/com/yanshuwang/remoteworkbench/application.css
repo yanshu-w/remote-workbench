@@ -916,3 +916,982 @@
     -fx-border-width: 1.5px;
 }
 
+/* ========================================================================= */
+/* macOS 15 (Sequoia) Native Light Theme (.theme-light)                       */
+/* ========================================================================= */
+
+.theme-light,
+.theme-light.root,
+.theme-light .app-root {
+    -fx-background-color: #f5f5f7;
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .top-bar {
+    -fx-background-color: #f6f6f6;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .brand-label {
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .subtitle-label,
+.theme-light .status-muted {
+    -fx-text-fill: #86868b;
+}
+
+.theme-light .sidebar {
+    -fx-background-color: #ececf0;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .section-label {
+    -fx-text-fill: #6e6e73;
+}
+
+.theme-light .sidebar-action,
+.theme-light .secondary-button {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .sidebar-action:hover,
+.theme-light .secondary-button:hover {
+    -fx-background-color: #f2f2f7;
+    -fx-border-color: #c7c7cc;
+}
+
+.theme-light .primary-button {
+    -fx-background-color: #0071e3;
+    -fx-text-fill: #ffffff;
+}
+
+.theme-light .primary-button:hover {
+    -fx-background-color: #0077ed;
+}
+
+.theme-light .connection-list .list-cell {
+    -fx-background-color: transparent;
+}
+
+.theme-light .connection-list .list-cell:filled:hover {
+    -fx-background-color: #e1e1e6;
+}
+
+.theme-light .connection-list .list-cell:filled:selected {
+    -fx-background-color: #cce2ff;
+}
+
+.theme-light .connection-name {
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .connection-list .list-cell:filled:selected .connection-name {
+    -fx-text-fill: #0071e3;
+}
+
+.theme-light .connection-address {
+    -fx-text-fill: #6e6e73;
+}
+
+.theme-light .connection-more-btn {
+    -fx-text-fill: #86868b;
+}
+
+.theme-light .connection-more-btn:hover {
+    -fx-background-color: #d8d8dc;
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .top-bar-icon-btn {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .top-bar-icon-btn:hover {
+    -fx-background-color: #f2f2f7;
+    -fx-border-color: #0071e3;
+}
+
+.theme-light .sidebar-toggle-btn {
+    -fx-text-fill: #6e6e73;
+}
+
+.theme-light .sidebar-toggle-btn:hover {
+    -fx-background-color: #dcdce2;
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .sidebar-slim-add-btn {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .sidebar-slim-add-btn:hover {
+    -fx-background-color: #f2f2f7;
+    -fx-border-color: #0071e3;
+}
+
+.theme-light .slim-server-btn {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .slim-server-btn:hover {
+    -fx-background-color: #f2f2f7;
+    -fx-border-color: #0071e3;
+}
+
+.theme-light .slim-server-btn.selected {
+    -fx-background-color: #cce2ff;
+    -fx-border-color: #0071e3;
+    -fx-border-width: 1.5px;
+}
+
+.theme-light .workspace-overview {
+    -fx-background-color: #f5f5f7;
+}
+
+.theme-light .workspace-title {
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .workspace-description {
+    -fx-text-fill: #6e6e73;
+}
+
+.theme-light .welcome-card {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 12, 0, 0, 3);
+}
+
+/* ========================================================================= */
+/* Workspace Tabs (macOS 15 Light Theme: 终端 / 文件管理)                     */
+/* ========================================================================= */
+
+.theme-light .workspace-tabs {
+    -fx-background-color: #f5f5f7;
+}
+
+.theme-light .workspace-tabs .tab-header-area {
+    -fx-padding: 4px 10px 0 10px;
+    -fx-background-color: #e8e8ed;
+    -fx-border-color: #d1d1d6;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.theme-light .workspace-tabs .tab-header-background {
+    -fx-background-color: #e8e8ed;
+}
+
+.theme-light .workspace-tabs .tab {
+    -fx-background-color: #dcdce2;
+    -fx-background-radius: 6px 6px 0 0;
+    -fx-padding: 6px 18px;
+    -fx-border-color: #ceced6;
+    -fx-border-width: 1px 1px 0 1px;
+    -fx-border-radius: 6px 6px 0 0;
+    -fx-cursor: hand;
+}
+
+.theme-light .workspace-tabs .tab:hover {
+    -fx-background-color: #e3e3e8;
+}
+
+.theme-light .workspace-tabs .tab:selected {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #0071e3 #ceced6 #ffffff #ceced6;
+    -fx-border-width: 2px 1px 0 1px;
+}
+
+.theme-light .workspace-tabs .tab .tab-label {
+    -fx-text-fill: #6e6e73;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.theme-light .workspace-tabs .tab:selected .tab-label {
+    -fx-text-fill: #0071e3;
+}
+
+.theme-light .workspace-tabs > .tab-content-area {
+    -fx-background-color: #ffffff;
+}
+
+/* ========================================================================= */
+/* Terminal Session Tabs (macOS 15 Light Theme: 终端 1, 终端 2 ...)         */
+/* ========================================================================= */
+
+.theme-light .terminal-session-tabs-root {
+    -fx-background-color: #ffffff;
+}
+
+.theme-light .terminal-session-header {
+    -fx-background-color: #f2f2f7;
+    -fx-border-color: #d1d1d6;
+    -fx-border-width: 0 0 1px 0;
+    -fx-padding: 6px 10px;
+}
+
+.theme-light .terminal-session-tab {
+    -fx-background-color: #e5e5ea;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-border-width: 1px;
+    -fx-padding: 4px 10px;
+    -fx-cursor: hand;
+}
+
+.theme-light .terminal-session-tab:hover {
+    -fx-background-color: #ebebef;
+    -fx-border-color: #c7c7cc;
+}
+
+.theme-light .terminal-session-tab:selected {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #0071e3;
+    -fx-border-width: 1.5px;
+}
+
+.theme-light .terminal-tab-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #6e6e73;
+}
+
+.theme-light .terminal-session-tab:selected .terminal-tab-title {
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .terminal-tab-close-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #8e8e93;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 2px 0 6px;
+    -fx-cursor: hand;
+}
+
+.theme-light .terminal-tab-close-btn:hover {
+    -fx-text-fill: #ff3b30;
+}
+
+.theme-light .terminal-add-tab-btn {
+    -fx-background-color: #e5e5ea;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 3px 8px;
+    -fx-cursor: hand;
+}
+
+.theme-light .terminal-add-tab-btn:hover {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #0071e3;
+    -fx-border-color: #0071e3;
+}
+
+/* ========================================================================= */
+/* Terminal View Toolbar & Canvas Container (macOS 15 Light Theme)           */
+/* ========================================================================= */
+
+.theme-light .terminal-view-root {
+    -fx-background-color: #ffffff;
+}
+
+.theme-light .terminal-top-bar {
+    -fx-background-color: #f6f6f6;
+    -fx-border-color: #d1d1d6;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.theme-light .terminal-title {
+    -fx-font-weight: bold;
+    -fx-text-fill: #1d1d1f;
+    -fx-font-size: 12px;
+}
+
+.theme-light .terminal-size-badge {
+    -fx-background-color: #e5e5ea;
+    -fx-text-fill: #6e6e73;
+    -fx-background-radius: 4px;
+    -fx-padding: 2px 6px;
+    -fx-font-size: 11px;
+    -fx-font-family: "SF Mono", monospace;
+}
+
+.theme-light .terminal-action-btn {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 4px;
+    -fx-padding: 3px 8px;
+    -fx-font-size: 11px;
+    -fx-cursor: hand;
+}
+
+.theme-light .terminal-action-btn:hover {
+    -fx-background-color: #f2f2f7;
+    -fx-border-color: #0071e3;
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .terminal-action-btn .arrow {
+    -fx-background-color: #6e6e73;
+}
+
+.theme-light .terminal-canvas-container {
+    -fx-background-color: #ffffff;
+    -fx-padding: 4px 6px;
+}
+
+.theme-light .terminal-scrollbar {
+    -fx-background-color: #ffffff;
+}
+
+.theme-light .terminal-scrollbar .thumb {
+    -fx-background-color: #d1d1d6;
+    -fx-background-radius: 4px;
+}
+
+.theme-light .terminal-scrollbar .thumb:hover {
+    -fx-background-color: #b0b0b8;
+}
+
+.theme-light .terminal-search-bar {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-border-width: 1px;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 10, 0.05, 0, 3);
+}
+
+.theme-light .terminal-search-input {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+}
+
+.theme-light .terminal-search-input:focused {
+    -fx-border-color: #0071e3;
+}
+
+.theme-light .search-nav-btn {
+    -fx-background-color: #f2f2f7;
+    -fx-text-fill: #1d1d1f;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 4px;
+}
+
+.theme-light .search-nav-btn:hover {
+    -fx-background-color: #e5e5ea;
+    -fx-border-color: #0071e3;
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .terminal-reconnect-banner {
+    -fx-background-color: rgba(255, 255, 255, 0.96);
+    -fx-border-color: #ff9500;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 14, 0.05, 0, 4);
+}
+
+.theme-light .terminal-reconnect-msg {
+    -fx-text-fill: #b45309;
+}
+
+.theme-light .terminal-reconnect-btn {
+    -fx-background-color: #0071e3;
+    -fx-text-fill: #ffffff;
+}
+
+.theme-light .terminal-reconnect-btn:hover {
+    -fx-background-color: #0077ed;
+}
+
+.theme-light .dashboard-bar {
+    -fx-background-color: transparent;
+}
+
+.theme-light .dashboard-chip {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .dashboard-chip-label {
+    -fx-text-fill: #86868b;
+}
+
+.theme-light .dashboard-chip-val {
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .mini-dashboard-badge {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .mini-dashboard-badge:hover {
+    -fx-border-color: #0071e3;
+    -fx-background-color: #f2f2f7;
+}
+
+.theme-light .mini-dashboard-text {
+    -fx-text-fill: #51545c;
+}
+
+.theme-light .status-bar {
+    -fx-background-color: #f6f6f6;
+    -fx-border-color: #d1d1d6;
+    -fx-text-fill: #6e6e73;
+}
+
+.theme-light .sftp-browser {
+    -fx-background-color: #ffffff;
+}
+
+.theme-light .sftp-toolbar {
+    -fx-background-color: #f6f6f6;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .sftp-path-input {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .sftp-path-input:focused {
+    -fx-border-color: #0071e3;
+}
+
+.theme-light .sftp-action-button {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+}
+
+.theme-light .sftp-action-button:hover {
+    -fx-background-color: #f2f2f7;
+}
+
+.theme-light .sftp-file-table,
+.theme-light .sftp-table {
+    -fx-background-color: #ffffff;
+    -fx-border-color: transparent;
+}
+
+.theme-light .sftp-file-table .column-header-background,
+.theme-light .sftp-file-table .column-header,
+.theme-light .sftp-table .column-header-background,
+.theme-light .sftp-table .column-header {
+    -fx-background-color: #f2f2f7;
+    -fx-border-color: #e5e5ea;
+    -fx-text-fill: #6e6e73;
+}
+
+.theme-light .sftp-table .column-header .label {
+    -fx-text-fill: #6e6e73;
+    -fx-font-weight: 600;
+}
+
+.theme-light .sftp-file-table .table-row-cell,
+.theme-light .sftp-table .table-row-cell {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #f0f0f2;
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .sftp-file-table .table-row-cell:odd,
+.theme-light .sftp-table .table-row-cell:odd {
+    -fx-background-color: #fafafc;
+}
+
+.theme-light .sftp-file-table .table-row-cell:filled:hover,
+.theme-light .sftp-file-table .table-row-cell:hover,
+.theme-light .sftp-table .table-row-cell:filled:hover,
+.theme-light .sftp-table .table-row-cell:hover {
+    -fx-background-color: #f0f0f5;
+}
+
+.theme-light .sftp-file-table .table-row-cell:filled:selected,
+.theme-light .sftp-file-table .table-row-cell:selected,
+.theme-light .sftp-table .table-row-cell:filled:selected,
+.theme-light .sftp-table .table-row-cell:selected {
+    -fx-background-color: #e4eefb;
+    -fx-text-fill: #0071e3;
+}
+
+.theme-light .sftp-table .table-cell {
+    -fx-text-fill: #1d1d1f;
+}
+
+.theme-light .sftp-table .table-row-cell:filled:selected .table-cell {
+    -fx-text-fill: #0071e3;
+}
+
+.theme-light .sftp-status-bar {
+    -fx-background-color: #f6f6f6;
+    -fx-border-color: #e5e5ea;
+}
+
+/* ========================================================================= */
+/* Dialog & Modal Window Styling (macOS 15 Light Theme)                      */
+/* ========================================================================= */
+
+.dialog-pane.theme-light,
+.theme-light.dialog-pane,
+.theme-light .dialog-pane {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-border-width: 1px;
+    -fx-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 24, 0.05, 0, 6);
+}
+
+.dialog-pane.theme-light > .header-panel,
+.theme-light.dialog-pane > .header-panel,
+.theme-light .dialog-pane > .header-panel,
+.dialog-pane.theme-light:header > .header-panel,
+.theme-light.dialog-pane:header > .header-panel {
+    -fx-background-color: #f5f5f7;
+    -fx-padding: 16px 20px;
+    -fx-border-color: #e5e5ea;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.dialog-pane.theme-light > .header-panel > .label,
+.theme-light.dialog-pane > .header-panel > .label,
+.theme-light .dialog-pane > .header-panel > .label,
+.dialog-pane.theme-light:header > .header-panel > .label,
+.theme-light.dialog-pane:header > .header-panel > .label {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1d1d1f;
+}
+
+.dialog-pane.theme-light > .content,
+.theme-light.dialog-pane > .content,
+.theme-light .dialog-pane > .content {
+    -fx-background-color: #ffffff;
+    -fx-padding: 18px 24px;
+}
+
+.dialog-pane.theme-light .label,
+.theme-light.dialog-pane .label,
+.theme-light .dialog-pane .label,
+.dialog-pane.theme-light > .content.label,
+.theme-light.dialog-pane > .content.label {
+    -fx-text-fill: #1d1d1f;
+    -fx-font-size: 13px;
+}
+
+.dialog-pane.theme-light > .button-bar,
+.theme-light.dialog-pane > .button-bar,
+.theme-light .dialog-pane > .button-bar {
+    -fx-background-color: #f5f5f7;
+    -fx-border-color: #e5e5ea;
+    -fx-border-width: 1px 0 0 0;
+    -fx-padding: 12px 20px;
+}
+
+.dialog-pane.theme-light .button-bar .button,
+.theme-light.dialog-pane .button-bar .button,
+.theme-light .dialog-pane .button-bar .button,
+.dialog-pane.theme-light .dialog-secondary-button,
+.theme-light.dialog-pane .dialog-secondary-button,
+.theme-light .dialog-pane .dialog-secondary-button {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-padding: 6px 18px;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+}
+
+.dialog-pane.theme-light .button-bar .button:hover,
+.theme-light.dialog-pane .button-bar .button:hover,
+.theme-light .dialog-pane .button-bar .button:hover,
+.dialog-pane.theme-light .dialog-secondary-button:hover,
+.theme-light.dialog-pane .dialog-secondary-button:hover,
+.theme-light .dialog-pane .dialog-secondary-button:hover {
+    -fx-background-color: #f2f2f7;
+    -fx-text-fill: #1d1d1f;
+    -fx-border-color: #c7c7cc;
+}
+
+.dialog-pane.theme-light .button-bar .button:pressed,
+.theme-light.dialog-pane .button-bar .button:pressed,
+.theme-light .dialog-pane .button-bar .button:pressed,
+.dialog-pane.theme-light .dialog-secondary-button:pressed,
+.theme-light.dialog-pane .dialog-secondary-button:pressed,
+.theme-light .dialog-pane .dialog-secondary-button:pressed {
+    -fx-background-color: #e5e5ea;
+}
+
+.dialog-pane.theme-light .button-bar .button:default,
+.theme-light.dialog-pane .button-bar .button:default,
+.theme-light .dialog-pane .button-bar .button:default,
+.dialog-pane.theme-light .dialog-primary-button,
+.theme-light.dialog-pane .dialog-primary-button,
+.theme-light .dialog-pane .dialog-primary-button {
+    -fx-background-color: #0071e3 !important;
+    -fx-text-fill: #ffffff !important;
+    -fx-font-weight: bold;
+    -fx-border-color: transparent !important;
+    -fx-background-radius: 5px;
+    -fx-padding: 6px 18px;
+}
+
+.dialog-pane.theme-light .button-bar .button:default:hover,
+.theme-light.dialog-pane .button-bar .button:default:hover,
+.theme-light .dialog-pane .button-bar .button:default:hover,
+.dialog-pane.theme-light .dialog-primary-button:hover,
+.theme-light.dialog-pane .dialog-primary-button:hover,
+.theme-light .dialog-pane .dialog-primary-button:hover {
+    -fx-background-color: #0077ed !important;
+}
+
+.dialog-pane.theme-light .button-bar .button:default:pressed,
+.theme-light.dialog-pane .button-bar .button:default:pressed,
+.theme-light .dialog-pane .button-bar .button:default:pressed,
+.dialog-pane.theme-light .dialog-primary-button:pressed,
+.theme-light.dialog-pane .dialog-primary-button:pressed,
+.theme-light .dialog-pane .dialog-primary-button:pressed {
+    -fx-background-color: #0062c4 !important;
+}
+
+.dialog-pane.theme-light .text-field,
+.theme-light.dialog-pane .text-field,
+.theme-light .dialog-pane .text-field,
+.dialog-pane.theme-light .password-field,
+.theme-light.dialog-pane .password-field,
+.theme-light .dialog-pane .password-field,
+.dialog-pane.theme-light .dialog-input,
+.theme-light.dialog-pane .dialog-input,
+.theme-light .dialog-pane .dialog-input {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #1d1d1f;
+    -fx-prompt-text-fill: #8e8e93;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-padding: 7px 11px;
+    -fx-font-size: 13px;
+}
+
+.dialog-pane.theme-light .text-field:focused,
+.theme-light.dialog-pane .text-field:focused,
+.theme-light .dialog-pane .text-field:focused,
+.dialog-pane.theme-light .password-field:focused,
+.theme-light.dialog-pane .password-field:focused,
+.theme-light .dialog-pane .password-field:focused,
+.dialog-pane.theme-light .dialog-input:focused,
+.theme-light.dialog-pane .dialog-input:focused,
+.theme-light .dialog-pane .dialog-input:focused {
+    -fx-border-color: #0071e3;
+    -fx-background-color: #ffffff;
+}
+
+.dialog-pane.theme-light .spinner,
+.theme-light.dialog-pane .spinner,
+.theme-light .dialog-pane .spinner {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+}
+
+.dialog-pane.theme-light .spinner:focused,
+.theme-light.dialog-pane .spinner:focused,
+.theme-light .dialog-pane .spinner:focused {
+    -fx-border-color: #0071e3;
+}
+
+.dialog-pane.theme-light .spinner .text-field,
+.theme-light.dialog-pane .spinner .text-field,
+.theme-light .dialog-pane .spinner .text-field {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-text-fill: #1d1d1f;
+    -fx-padding: 7px 11px;
+}
+
+.dialog-pane.theme-light .spinner .increment-arrow-button,
+.dialog-pane.theme-light .spinner .decrement-arrow-button,
+.theme-light.dialog-pane .spinner .increment-arrow-button,
+.theme-light.dialog-pane .spinner .decrement-arrow-button,
+.theme-light .dialog-pane .spinner .increment-arrow-button,
+.theme-light .dialog-pane .spinner .decrement-arrow-button {
+    -fx-background-color: #f2f2f7;
+    -fx-background-radius: 3px;
+    -fx-cursor: hand;
+}
+
+.dialog-pane.theme-light .spinner .increment-arrow-button:hover,
+.dialog-pane.theme-light .spinner .decrement-arrow-button:hover,
+.theme-light.dialog-pane .spinner .increment-arrow-button:hover,
+.theme-light.dialog-pane .spinner .decrement-arrow-button:hover,
+.theme-light .dialog-pane .spinner .increment-arrow-button:hover,
+.theme-light .dialog-pane .spinner .decrement-arrow-button:hover {
+    -fx-background-color: #e5e5ea;
+}
+
+.dialog-pane.theme-light .spinner .increment-arrow,
+.dialog-pane.theme-light .spinner .decrement-arrow,
+.theme-light.dialog-pane .spinner .increment-arrow,
+.theme-light.dialog-pane .spinner .decrement-arrow,
+.theme-light .dialog-pane .spinner .increment-arrow,
+.theme-light .dialog-pane .spinner .decrement-arrow {
+    -fx-background-color: #6e6e73;
+}
+
+.dialog-pane.theme-light .combo-box,
+.theme-light.dialog-pane .combo-box,
+.theme-light .dialog-pane .combo-box,
+.dialog-pane.theme-light .combo-box-base,
+.theme-light.dialog-pane .combo-box-base,
+.theme-light .dialog-pane .combo-box-base {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-padding: 2px 4px;
+}
+
+.dialog-pane.theme-light .combo-box:focused,
+.theme-light.dialog-pane .combo-box:focused,
+.theme-light .dialog-pane .combo-box:focused,
+.dialog-pane.theme-light .combo-box-base:focused,
+.theme-light.dialog-pane .combo-box-base:focused,
+.theme-light .dialog-pane .combo-box-base:focused {
+    -fx-border-color: #0071e3;
+}
+
+.dialog-pane.theme-light .combo-box .list-cell,
+.theme-light.dialog-pane .combo-box .list-cell,
+.theme-light .dialog-pane .combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1d1d1f;
+    -fx-padding: 5px 8px;
+}
+
+.dialog-pane.theme-light .combo-box-base .arrow-button,
+.theme-light.dialog-pane .combo-box-base .arrow-button,
+.theme-light .dialog-pane .combo-box-base .arrow-button {
+    -fx-background-color: transparent;
+}
+
+.dialog-pane.theme-light .combo-box-base .arrow,
+.theme-light.dialog-pane .combo-box-base .arrow,
+.theme-light .dialog-pane .combo-box-base .arrow {
+    -fx-background-color: #6e6e73;
+}
+
+/* ComboBox Popup List (Light Theme) */
+.combo-box-popup.theme-light .list-view,
+.theme-light .combo-box-popup .list-view,
+.theme-light.combo-box-popup .list-view {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 14, 0.05, 0, 4);
+    -fx-padding: 4px;
+}
+
+.combo-box-popup.theme-light .list-view .list-cell,
+.theme-light .combo-box-popup .list-view .list-cell,
+.theme-light.combo-box-popup .list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1d1d1f;
+    -fx-padding: 7px 10px;
+    -fx-background-radius: 4px;
+}
+
+.combo-box-popup.theme-light .list-view .list-cell:filled:hover,
+.theme-light .combo-box-popup .list-view .list-cell:filled:hover,
+.theme-light.combo-box-popup .list-view .list-cell:filled:hover {
+    -fx-background-color: #f2f2f7;
+    -fx-text-fill: #1d1d1f;
+}
+
+.combo-box-popup.theme-light .list-view .list-cell:filled:selected,
+.theme-light .combo-box-popup .list-view .list-cell:filled:selected,
+.theme-light.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: #cce2ff;
+    -fx-text-fill: #0071e3;
+}
+
+.dialog-pane.theme-light .check-box,
+.theme-light.dialog-pane .check-box,
+.theme-light .dialog-pane .check-box {
+    -fx-text-fill: #1d1d1f;
+}
+
+.dialog-pane.theme-light .check-box .box,
+.theme-light.dialog-pane .check-box .box,
+.theme-light .dialog-pane .check-box .box {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 4px;
+}
+
+.dialog-pane.theme-light .check-box:selected .box,
+.theme-light.dialog-pane .check-box:selected .box,
+.theme-light .dialog-pane .check-box:selected .box {
+    -fx-background-color: #0071e3;
+    -fx-border-color: #0071e3;
+}
+
+.dialog-pane.theme-light .check-box:selected .mark,
+.theme-light.dialog-pane .check-box:selected .mark,
+.theme-light .dialog-pane .check-box:selected .mark {
+    -fx-background-color: #ffffff;
+}
+
+.dialog-pane.theme-light .dialog-form-label,
+.theme-light.dialog-pane .dialog-form-label,
+.theme-light .dialog-pane .dialog-form-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: #1d1d1f;
+    -fx-font-size: 13px;
+}
+
+.dialog-pane.theme-light .dialog-form-hint,
+.theme-light.dialog-pane .dialog-form-hint,
+.theme-light .dialog-pane .dialog-form-hint {
+    -fx-text-fill: #86868b;
+}
+
+.dialog-header-glyph {
+    -fx-font-size: 24px;
+    -fx-text-fill: #4c82e8;
+}
+
+.dialog-pane.theme-light .dialog-header-glyph,
+.theme-light.dialog-pane .dialog-header-glyph,
+.theme-light .dialog-header-glyph {
+    -fx-text-fill: #0071e3;
+}
+
+.dialog-pane.theme-light .dialog-preview-box,
+.theme-light.dialog-pane .dialog-preview-box,
+.theme-light .dialog-preview-box {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+}
+
+/* ========================================================================= */
+/* Context Menu (macOS 15 Light Theme)                                       */
+/* ========================================================================= */
+
+.context-menu.theme-light,
+.theme-light.context-menu,
+.theme-light .context-menu {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d1d6;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 14, 0.05, 0, 4);
+    -fx-padding: 4px;
+}
+
+.context-menu.theme-light .menu-item,
+.theme-light.context-menu .menu-item,
+.theme-light .context-menu .menu-item {
+    -fx-background-radius: 4px;
+    -fx-padding: 6px 12px;
+}
+
+.context-menu.theme-light .menu-item .label,
+.theme-light.context-menu .menu-item .label,
+.theme-light .context-menu .menu-item .label {
+    -fx-text-fill: #1d1d1f;
+}
+
+.context-menu.theme-light .menu-item:focused,
+.context-menu.theme-light .menu-item:hover,
+.theme-light.context-menu .menu-item:focused,
+.theme-light.context-menu .menu-item:hover,
+.theme-light .context-menu .menu-item:focused,
+.theme-light .context-menu .menu-item:hover {
+    -fx-background-color: #0071e3;
+}
+
+.context-menu.theme-light .menu-item:focused .label,
+.context-menu.theme-light .menu-item:hover .label,
+.theme-light.context-menu .menu-item:focused .label,
+.theme-light.context-menu .menu-item:hover .label,
+.theme-light .context-menu .menu-item:focused .label,
+.theme-light .context-menu .menu-item:hover .label {
+    -fx-text-fill: #ffffff;
+}
+
+/* ========================================================================= */
+/* Remote File Editor (macOS 15 Light Theme)                                 */
+/* ========================================================================= */
+
+.remote-editor-root.theme-light,
+.theme-light.remote-editor-root,
+.theme-light .remote-editor-root {
+    -fx-background-color: #ffffff;
+}
+
+.remote-editor-root.theme-light .remote-editor-header,
+.theme-light .remote-editor-header {
+    -fx-background-color: #f5f5f7;
+    -fx-border-color: #e5e5ea;
+    -fx-border-width: 0 0 1px 0;
+    -fx-padding: 10px 14px;
+}
+
+.remote-editor-root.theme-light .remote-editor-textarea,
+.theme-light .remote-editor-textarea {
+    -fx-font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #1d1d1f;
+    -fx-background-color: #ffffff;
+    -fx-highlight-fill: #b3d7ff;
+    -fx-highlight-text-fill: #000000;
+}
+
+.remote-editor-root.theme-light .remote-editor-textarea .content,
+.theme-light .remote-editor-textarea .content {
+    -fx-background-color: #ffffff;
+}
+
+.remote-editor-root.theme-light .remote-editor-status,
+.theme-light .remote-editor-status {
+    -fx-font-size: 11px;
+    -fx-text-fill: #86868b;
+}
+
+.remote-editor-root.theme-light .remote-editor-status.modified,
+.theme-light .remote-editor-status.modified {
+    -fx-text-fill: #bf8600;
+}
+
+.remote-editor-root.theme-light .remote-editor-status.saved,
+.theme-light .remote-editor-status.saved {
+    -fx-text-fill: #28a745;
+}
+
+
+

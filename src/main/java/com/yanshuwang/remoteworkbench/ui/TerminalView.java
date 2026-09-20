@@ -7,6 +7,7 @@ import com.yanshuwang.remoteworkbench.ui.terminal.CursorStyle;
 import com.yanshuwang.remoteworkbench.ui.terminal.TerminalBuffer;
 import com.yanshuwang.remoteworkbench.ui.terminal.TerminalCanvas;
 import com.yanshuwang.remoteworkbench.ui.terminal.TerminalTheme;
+import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
@@ -908,26 +909,20 @@ public final class TerminalView extends BorderPane {
             alert.setTitle("导出成功");
             alert.setHeaderText("终端会话日志导出成功");
             alert.setContentText("日志文件已成功保存至：\n" + file.getAbsolutePath());
-            if (window != null) {
-                alert.initOwner(window);
-            }
+            ThemeManager.applyDialogTheme(alert, window);
             alert.showAndWait();
         } catch (Exception ex) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("导出失败");
             alert.setHeaderText("保存日志文件时发生错误");
             alert.setContentText(ex.getMessage());
-            if (window != null) {
-                alert.initOwner(window);
-            }
+            ThemeManager.applyDialogTheme(alert, window);
             alert.showAndWait();
         }
     }
 
     public void applyTerminalSettings(TerminalTheme theme, CursorStyle cursorStyle, boolean cursorBlink) {
-        if (theme != null) {
-            canvas.setTheme(theme);
-        }
+        canvas.setTheme(theme != null ? theme : TerminalTheme.AUTO);
         if (cursorStyle != null) {
             canvas.setCursorStyle(cursorStyle);
         }

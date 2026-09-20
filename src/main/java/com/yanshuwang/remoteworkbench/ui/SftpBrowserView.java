@@ -3,6 +3,7 @@ package com.yanshuwang.remoteworkbench.ui;
 import com.yanshuwang.remoteworkbench.connection.ConnectionProfile;
 import com.yanshuwang.remoteworkbench.sftp.RemoteFileItem;
 import com.yanshuwang.remoteworkbench.sftp.SftpService;
+import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -369,21 +370,7 @@ public final class SftpBrowserView extends BorderPane {
         dialog.setTitle("新建文件夹");
         dialog.setHeaderText("新建远程文件夹");
         dialog.setContentText("请输入文件夹名称：");
-        if (getScene() != null && getScene().getWindow() != null) {
-            dialog.initOwner(getScene().getWindow());
-        }
-        String css = getClass().getResource("/com/yanshuwang/remoteworkbench/application.css").toExternalForm();
-        if (!dialog.getDialogPane().getStylesheets().contains(css)) {
-            dialog.getDialogPane().getStylesheets().add(css);
-        }
-        Node okBtn = dialog.getDialogPane().lookupButton(ButtonType.OK);
-        if (okBtn != null) {
-            okBtn.getStyleClass().add("dialog-primary-button");
-        }
-        Node cancelBtn = dialog.getDialogPane().lookupButton(ButtonType.CANCEL);
-        if (cancelBtn != null) {
-            cancelBtn.getStyleClass().add("dialog-secondary-button");
-        }
+        applyDialogTheme(dialog);
 
         Optional<String> result = dialog.showAndWait();
         result.ifPresent(name -> {
@@ -506,13 +493,7 @@ public final class SftpBrowserView extends BorderPane {
     }
 
     private void applyDialogTheme(Dialog<?> dialog) {
-        if (getScene() != null && getScene().getWindow() != null) {
-            dialog.initOwner(getScene().getWindow());
-        }
-        String css = getClass().getResource("/com/yanshuwang/remoteworkbench/application.css").toExternalForm();
-        if (!dialog.getDialogPane().getStylesheets().contains(css)) {
-            dialog.getDialogPane().getStylesheets().add(css);
-        }
+        ThemeManager.applyDialogTheme(dialog, getScene() != null ? getScene().getWindow() : null);
         Node okBtn = dialog.getDialogPane().lookupButton(ButtonType.OK);
         if (okBtn != null) {
             okBtn.getStyleClass().add("dialog-primary-button");
@@ -531,8 +512,10 @@ public final class SftpBrowserView extends BorderPane {
         ButtonType deleteButton = new ButtonType("删除", ButtonBar.ButtonData.OK_DONE);
         ButtonType cancelButton = new ButtonType("取消", ButtonBar.ButtonData.CANCEL_CLOSE);
         alert.getButtonTypes().setAll(deleteButton, cancelButton);
-        if (getScene() != null && getScene().getWindow() != null) {
-            alert.initOwner(getScene().getWindow());
+        applyDialogTheme(alert);
+        Node deleteBtn = alert.getDialogPane().lookupButton(deleteButton);
+        if (deleteBtn != null) {
+            deleteBtn.getStyleClass().add("dialog-primary-button");
         }
 
         alert.showAndWait().ifPresent(selected -> {
@@ -664,19 +647,7 @@ public final class SftpBrowserView extends BorderPane {
         alert.setTitle(title);
         alert.setHeaderText(header);
         alert.setContentText(detail == null || detail.isBlank() ? "未知错误" : detail);
-        if (getScene() != null && getScene().getWindow() != null) {
-            alert.initOwner(getScene().getWindow());
-        }
-        if (alert.getDialogPane() != null) {
-            String css = getClass().getResource("/com/yanshuwang/remoteworkbench/application.css").toExternalForm();
-            if (!alert.getDialogPane().getStylesheets().contains(css)) {
-                alert.getDialogPane().getStylesheets().add(css);
-            }
-            Node okBtn = alert.getDialogPane().lookupButton(ButtonType.OK);
-            if (okBtn != null) {
-                okBtn.getStyleClass().add("dialog-primary-button");
-            }
-        }
+        applyDialogTheme(alert);
         alert.showAndWait();
     }
 }

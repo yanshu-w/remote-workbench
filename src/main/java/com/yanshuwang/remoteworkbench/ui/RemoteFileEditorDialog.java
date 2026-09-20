@@ -3,6 +3,7 @@ package com.yanshuwang.remoteworkbench.ui;
 import com.yanshuwang.remoteworkbench.connection.ConnectionProfile;
 import com.yanshuwang.remoteworkbench.sftp.RemoteFileItem;
 import com.yanshuwang.remoteworkbench.sftp.SftpService;
+import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -43,13 +44,8 @@ public final class RemoteFileEditorDialog extends Dialog<Void> {
         this.item = item;
         this.sftpService = sftpService;
 
-        if (owner != null) {
-            initOwner(owner);
-        }
         setTitle("在线文本编辑 - " + item.name());
-
-        String css = getClass().getResource("/com/yanshuwang/remoteworkbench/application.css").toExternalForm();
-        getDialogPane().getStylesheets().add(css);
+        ThemeManager.applyDialogTheme(this, owner);
         getDialogPane().getStyleClass().add("remote-editor-root");
 
         ButtonType closeButtonType = new ButtonType("关闭", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -75,10 +71,7 @@ public final class RemoteFileEditorDialog extends Dialog<Void> {
                 confirm.setTitle("未保存修改");
                 confirm.setHeaderText("文件尚未保存");
                 confirm.setContentText("文件 " + item.name() + " 已经修改，确认放弃修改并退出吗？");
-                confirm.initOwner(getOwner());
-                if (confirm.getDialogPane() != null) {
-                    confirm.getDialogPane().getStylesheets().add(css);
-                }
+                ThemeManager.applyDialogTheme(confirm, getOwner());
                 var res = confirm.showAndWait();
                 if (res.isEmpty() || res.get() != ButtonType.OK) {
                     event.consume();
@@ -221,7 +214,7 @@ public final class RemoteFileEditorDialog extends Dialog<Void> {
                         alert.setTitle("保存失败");
                         alert.setHeaderText("无法将文件写入服务器");
                         alert.setContentText(error.getMessage());
-                        alert.initOwner(getOwner());
+                        ThemeManager.applyDialogTheme(alert, getOwner());
                         alert.showAndWait();
                     } else {
                         isModified = false;

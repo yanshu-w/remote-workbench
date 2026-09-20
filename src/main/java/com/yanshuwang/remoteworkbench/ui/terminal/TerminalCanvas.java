@@ -1,5 +1,6 @@
 package com.yanshuwang.remoteworkbench.ui.terminal;
 
+import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -22,7 +23,7 @@ public final class TerminalCanvas extends Canvas {
     private String fontFamily;
     private int fontSize;
 
-    private TerminalTheme theme = TerminalTheme.DEFAULT_DARK;
+    private TerminalTheme theme = TerminalTheme.AUTO.resolveEffectiveTheme(ThemeManager.isDarkMode());
     private CursorStyle cursorStyle = CursorStyle.BLOCK;
     private boolean cursorBlink = true;
     private boolean cursorBlinkVisible = true;
@@ -48,6 +49,10 @@ public final class TerminalCanvas extends Canvas {
         this.buffer = buffer;
         this.fontFamily = fontFamily;
         this.fontSize = fontSize;
+        this.theme = TerminalTheme.AUTO.resolveEffectiveTheme(ThemeManager.isDarkMode());
+        if (buffer != null) {
+            buffer.applyTheme(this.theme);
+        }
         setCursor(Cursor.TEXT);
         updateFontMetrics();
         setupMouseSelection();
@@ -336,25 +341,45 @@ public final class TerminalCanvas extends Canvas {
                 }
 
                 boolean selected = isCellSelected(r, c);
-                Color bg = cell.getBackground();
+                Color cellBg = cell.getBackground();
+                Color cellFg = cell.getForeground();
                 double cellWidth = cell.isWide() ? (charWidth * 2.0) : charWidth;
+
+                Color drawBg;
+                if (cellBg == null || isKnownDefaultBackground(cellBg)) {
+                    drawBg = theme.background();
+                } else if (TerminalColor.DEFAULT_FOREGROUND.equals(cellBg) || isKnownDefaultForeground(cellBg)) {
+                    drawBg = theme.foreground();
+                } else {
+                    drawBg = cellBg;
+                }
 
                 if (selected) {
                     gc.setFill(theme.selectionColor());
                     gc.fillRect(x, y, cellWidth + 0.5, charHeight);
-                } else if (!TerminalColor.DEFAULT_BACKGROUND.equals(bg) && !theme.background().equals(bg)) {
-                    gc.setFill(bg);
+                } else if (!theme.background().equals(drawBg)) {
+                    gc.setFill(drawBg);
                     gc.fillRect(x, y, cellWidth + 0.5, charHeight);
                 }
 
                 char ch = cell.getCharacter();
                 if (ch > 0x20) {
                     gc.setFont(cell.isBold() ? boldFont : normalFont);
-                    gc.setFill(selected ? Color.WHITE : cell.getForeground());
+                    Color drawFg;
+                    if (selected) {
+                        drawFg = (theme == TerminalTheme.MACOS_LIGHT) ? theme.foreground() : Color.WHITE;
+                    } else if (cellFg == null || isKnownDefaultForeground(cellFg)) {
+                        drawFg = theme.foreground();
+                    } else if (TerminalColor.DEFAULT_BACKGROUND.equals(cellFg) || isKnownDefaultBackground(cellFg)) {
+                        drawFg = theme.background();
+                    } else {
+                        drawFg = cellFg;
+                    }
+                    gc.setFill(drawFg);
                     gc.fillText(String.valueOf(ch), x, y + baselineOffset);
 
                     if (cell.isUnderline()) {
-                        gc.setStroke(selected ? Color.WHITE : cell.getForeground());
+                        gc.setStroke(drawFg);
                         gc.setLineWidth(1.0);
                         gc.strokeLine(x, y + charHeight - 1, x + cellWidth, y + charHeight - 1);
                     }
@@ -407,11 +432,10 @@ public final class TerminalCanvas extends Canvas {
     }
 
     public void setTheme(TerminalTheme theme) {
-        if (theme != null) {
-            this.theme = theme;
-            buffer.applyTheme(theme);
-            requestRender();
-        }
+        TerminalTheme target = (theme != null) ? theme : TerminalTheme.AUTO;
+        this.theme = target.resolveEffectiveTheme(ThemeManager.isDarkMode());
+        buffer.applyTheme(this.theme);
+        requestRender();
     }
 
     public TerminalTheme getTheme() {
@@ -457,5 +481,35 @@ public final class TerminalCanvas extends Canvas {
         if (blinkTimeline != null) {
             blinkTimeline.stop();
         }
+    }
+
+    private static boolean isKnownDefaultBackground(Color c) {
+        if (c == null) {
+            return true;
+        }
+        if (TerminalColor.DEFAULT_BACKGROUND.equals(c)) {
+            return true;
+        }
+        for (TerminalTheme th : TerminalTheme.getAllThemes()) {
+            if (th.background().equals(c)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isKnownDefaultForeground(Color c) {
+        if (c == null) {
+            return true;
+        }
+        if (TerminalColor.DEFAULT_FOREGROUND.equals(c)) {
+            return true;
+        }
+        for (TerminalTheme th : TerminalTheme.getAllThemes()) {
+            if (th.foreground().equals(c)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

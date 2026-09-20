@@ -42,19 +42,49 @@ public record TerminalTheme(
         return foreground;
     }
 
-    // Built-in Themes
-    public static final TerminalTheme DEFAULT_DARK = new TerminalTheme(
-            "default_dark",
-            "默认暗夜黑 (Default Dark)",
-            Color.web("#17181b"),
-            Color.web("#e8e9ed"),
-            Color.web("#4c82e8"),
+    public static final TerminalTheme AUTO = new TerminalTheme(
+            "auto",
+            "跟随界面外观 (Auto)",
+            Color.web("#1e1e1e"),
+            Color.web("#f5f5f7"),
+            Color.web("#0a84ff"),
             Color.web("#264f78"),
             new Color[]{
-                    Color.web("#1f2024"), Color.web("#f05d5e"), Color.web("#62c073"), Color.web("#e5c07b"),
-                    Color.web("#4c82e8"), Color.web("#c678dd"), Color.web("#56b6c2"), Color.web("#abb2bf"),
-                    Color.web("#5c6370"), Color.web("#ff6c6b"), Color.web("#98c379"), Color.web("#e5c07b"),
-                    Color.web("#61afef"), Color.web("#c678dd"), Color.web("#56b6c2"), Color.web("#ffffff")
+                    Color.web("#1e1e1e"), Color.web("#ff453a"), Color.web("#30d158"), Color.web("#ffd60a"),
+                    Color.web("#0a84ff"), Color.web("#bf5af2"), Color.web("#64d2ff"), Color.web("#f5f5f7"),
+                    Color.web("#636366"), Color.web("#ff6961"), Color.web("#4cd964"), Color.web("#ffd426"),
+                    Color.web("#409cff"), Color.web("#da8fff"), Color.web("#70d7ff"), Color.web("#ffffff")
+            }
+    );
+
+    // Built-in Themes
+    public static final TerminalTheme MACOS_DARK = new TerminalTheme(
+            "macos_dark",
+            "默认黑 (macOS 15)",
+            Color.web("#1e1e1e"),
+            Color.web("#f5f5f7"),
+            Color.web("#0a84ff"),
+            Color.web("#264f78"),
+            new Color[]{
+                    Color.web("#1e1e1e"), Color.web("#ff453a"), Color.web("#30d158"), Color.web("#ffd60a"),
+                    Color.web("#0a84ff"), Color.web("#bf5af2"), Color.web("#64d2ff"), Color.web("#f5f5f7"),
+                    Color.web("#636366"), Color.web("#ff6961"), Color.web("#4cd964"), Color.web("#ffd426"),
+                    Color.web("#409cff"), Color.web("#da8fff"), Color.web("#70d7ff"), Color.web("#ffffff")
+            }
+    );
+
+    public static final TerminalTheme MACOS_LIGHT = new TerminalTheme(
+            "macos_light",
+            "默认白 (macOS 15)",
+            Color.web("#ffffff"),
+            Color.web("#1d1d1f"),
+            Color.web("#0071e3"),
+            Color.web("#b3d7ff"),
+            new Color[]{
+                    Color.web("#000000"), Color.web("#d70000"), Color.web("#008700"), Color.web("#b76e00"),
+                    Color.web("#0071e3"), Color.web("#af00db"), Color.web("#00838f"), Color.web("#707070"),
+                    Color.web("#8e8e93"), Color.web("#ff3b30"), Color.web("#34c759"), Color.web("#ff9500"),
+                    Color.web("#0071e3"), Color.web("#af52de"), Color.web("#5ac8fa"), Color.web("#ffffff")
             }
     );
 
@@ -133,8 +163,23 @@ public record TerminalTheme(
             }
     );
 
+    public TerminalTheme resolveEffectiveTheme(boolean isDark) {
+        if (!isDark) {
+            // 在浅色外观下（默认白 / 跟随系统浅色），终端统一呈现 macOS 15 默认白风格
+            return MACOS_LIGHT;
+        } else {
+            // 在暗色外观下（默认黑 / 跟随系统深色），如果当前为自适应、默认白或已废弃的默认暗夜黑，自动转换为默认黑
+            if (this == AUTO || this == MACOS_LIGHT || "auto".equalsIgnoreCase(id) || "macos_light".equalsIgnoreCase(id) || "default_dark".equalsIgnoreCase(id)) {
+                return MACOS_DARK;
+            }
+            return this;
+        }
+    }
+
     public static final List<TerminalTheme> BUILTIN_THEMES = List.of(
-            DEFAULT_DARK,
+            AUTO,
+            MACOS_LIGHT,
+            MACOS_DARK,
             DRACULA,
             ONE_DARK_PRO,
             NORD,
@@ -143,15 +188,15 @@ public record TerminalTheme(
     );
 
     public static TerminalTheme getTheme(String id) {
-        if (id == null || id.isBlank()) {
-            return DEFAULT_DARK;
+        if (id == null || id.isBlank() || id.equalsIgnoreCase("auto") || id.equalsIgnoreCase("default_dark")) {
+            return AUTO;
         }
         for (TerminalTheme theme : BUILTIN_THEMES) {
             if (theme.id().equalsIgnoreCase(id) || theme.displayName().equalsIgnoreCase(id)) {
                 return theme;
             }
         }
-        return DEFAULT_DARK;
+        return AUTO;
     }
 
     public static List<TerminalTheme> getAllThemes() {

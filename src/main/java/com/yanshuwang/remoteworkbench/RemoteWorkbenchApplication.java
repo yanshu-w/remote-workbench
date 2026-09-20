@@ -15,6 +15,7 @@ public final class RemoteWorkbenchApplication extends Application {
 
     @Override
     public void start(Stage stage) {
+        com.yanshuwang.remoteworkbench.ui.theme.ThemeManager.init();
         mainView = new MainView();
         Scene scene = new Scene(mainView, INITIAL_WIDTH, INITIAL_HEIGHT);
         scene.getStylesheets().add(

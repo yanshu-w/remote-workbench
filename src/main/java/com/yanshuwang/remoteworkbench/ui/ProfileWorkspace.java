@@ -5,6 +5,7 @@ import com.yanshuwang.remoteworkbench.sftp.SftpService;
 import com.yanshuwang.remoteworkbench.ssh.SshConnectionService;
 import com.yanshuwang.remoteworkbench.ui.terminal.CursorStyle;
 import com.yanshuwang.remoteworkbench.ui.terminal.TerminalTheme;
+import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 
@@ -33,7 +34,7 @@ public final class ProfileWorkspace implements AutoCloseable {
         this.profile = Objects.requireNonNull(profile, "profile");
         this.terminalSessionPane = new TerminalSessionTabPane();
         this.terminalSessionPane.applyFont(fontFamily, fontSize);
-        this.terminalSessionPane.applyTerminalSettings(theme, cursorStyle, cursorBlink);
+        this.terminalSessionPane.applyTerminalSettings(theme != null ? theme.resolveEffectiveTheme(ThemeManager.isDarkMode()) : null, cursorStyle, cursorBlink);
         this.sftpBrowserView = new SftpBrowserView();
 
         this.terminalTab = new Tab("终端 (SSH)", terminalSessionPane);
@@ -80,7 +81,7 @@ public final class ProfileWorkspace implements AutoCloseable {
     }
 
     public void applyTerminalSettings(TerminalTheme theme, CursorStyle cursorStyle, boolean cursorBlink) {
-        terminalSessionPane.applyTerminalSettings(theme, cursorStyle, cursorBlink);
+        terminalSessionPane.applyTerminalSettings(theme != null ? theme.resolveEffectiveTheme(ThemeManager.isDarkMode()) : null, cursorStyle, cursorBlink);
     }
 
     public void setOnReconnectRequested(Runnable runnable) {

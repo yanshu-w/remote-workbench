@@ -6,6 +6,9 @@ import com.yanshuwang.remoteworkbench.sftp.SftpService;
 import com.yanshuwang.remoteworkbench.ssh.SshConnectionService;
 import com.yanshuwang.remoteworkbench.ui.terminal.CursorStyle;
 import com.yanshuwang.remoteworkbench.ui.terminal.TerminalTheme;
+import com.yanshuwang.remoteworkbench.ui.theme.AppAppearanceMode;
+import com.yanshuwang.remoteworkbench.ui.theme.SystemThemeDetector;
+import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -97,11 +100,18 @@ public final class MainView extends BorderPane implements AutoCloseable {
     private boolean terminalCursorBlink = PREFERENCES.getBoolean("terminal.cursor.blink", true);
     private ConnectionProfile selectedProfile;
 
+    private AppAppearanceMode appAppearanceMode = resolveAppearanceMode();
+    private final java.util.function.Consumer<Boolean> systemThemeListener = this::onSystemThemeChanged;
+
     private boolean sidebarCollapsed = PREFERENCES.getBoolean("sidebar.collapsed", false);
     private final StackPane sidebarContainer = new StackPane();
     private VBox fullSidebar;
     private VBox slimSidebar;
     private final VBox slimServerListBox = new VBox(8);
+
+    private static AppAppearanceMode resolveAppearanceMode() {
+        return ThemeManager.getAppearanceMode();
+    }
 
     private static String resolveMonospaceFont() {
         String saved = PREFERENCES.get("terminal.font.family", "Menlo");
@@ -113,8 +123,12 @@ public final class MainView extends BorderPane implements AutoCloseable {
     }
 
     private static TerminalTheme resolveTerminalTheme() {
-        String id = PREFERENCES.get("terminal.theme", TerminalTheme.DEFAULT_DARK.id());
-        return TerminalTheme.getTheme(id);
+        String id = PREFERENCES.get("terminal.theme", TerminalTheme.AUTO.id());
+        TerminalTheme theme = TerminalTheme.getTheme(id);
+        if (!ThemeManager.isDarkMode() && theme != TerminalTheme.MACOS_LIGHT) {
+            return TerminalTheme.AUTO;
+        }
+        return theme;
     }
 
     private static CursorStyle resolveCursorStyle() {
@@ -157,6 +171,10 @@ public final class MainView extends BorderPane implements AutoCloseable {
         if (!connectionProfiles.isEmpty()) {
             connectionList.getSelectionModel().select(0);
         }
+
+        ThemeManager.addThemeListener(systemThemeListener);
+        SystemThemeDetector.addListener(systemThemeListener);
+        applyEffectiveTheme(false);
     }
 
     private Node createTopBar() {
@@ -494,7 +512,7 @@ public final class MainView extends BorderPane implements AutoCloseable {
                     profile,
                     terminalFontFamily,
                     terminalFontSize,
-                    terminalTheme,
+                    terminalTheme.resolveEffectiveTheme(isEffectiveDarkMode()),
                     terminalCursorStyle,
                     terminalCursorBlink
             );
@@ -503,17 +521,42 @@ public final class MainView extends BorderPane implements AutoCloseable {
         });
     }
 
+    private void onSystemThemeChanged(boolean isDark) {
+        this.appAppearanceMode = ThemeManager.getAppearanceMode();
+        applyEffectiveTheme(true);
+    }
+
+    public boolean isEffectiveDarkMode() {
+        return ThemeManager.isDarkMode();
+    }
+
+    private void applyEffectiveTheme(boolean notifyWorkspaces) {
+        boolean isDark = isEffectiveDarkMode();
+        String themeClass = isDark ? "theme-dark" : "theme-light";
+        String removeClass = isDark ? "theme-light" : "theme-dark";
+
+        getStyleClass().remove(removeClass);
+        if (!getStyleClass().contains(themeClass)) {
+            getStyleClass().add(themeClass);
+        }
+
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().getStyleClass().remove(removeClass);
+            if (!getScene().getRoot().getStyleClass().contains(themeClass)) {
+                getScene().getRoot().getStyleClass().add(themeClass);
+            }
+        }
+
+        TerminalTheme effectiveTheme = terminalTheme.resolveEffectiveTheme(isDark);
+        if (notifyWorkspaces) {
+            for (ProfileWorkspace w : profileWorkspaces.values()) {
+                w.applyTerminalSettings(effectiveTheme, terminalCursorStyle, terminalCursorBlink);
+            }
+        }
+    }
+
     private void applyDialogTheme(Dialog<?> dialog) {
-        if (dialog == null || dialog.getDialogPane() == null) {
-            return;
-        }
-        if (getScene() != null && getScene().getWindow() != null) {
-            dialog.initOwner(getScene().getWindow());
-        }
-        String css = getClass().getResource("/com/yanshuwang/remoteworkbench/application.css").toExternalForm();
-        if (!dialog.getDialogPane().getStylesheets().contains(css)) {
-            dialog.getDialogPane().getStylesheets().add(css);
-        }
+        ThemeManager.applyDialogTheme(dialog, getScene() != null ? getScene().getWindow() : null);
     }
 
     public void showSettingsDialog() {
@@ -523,7 +566,7 @@ public final class MainView extends BorderPane implements AutoCloseable {
         applyDialogTheme(dialog);
 
         Label icon = new Label("⚙");
-        icon.setStyle("-fx-font-size: 24px; -fx-text-fill: #4c82e8;");
+        icon.getStyleClass().add("dialog-header-glyph");
         dialog.setGraphic(icon);
 
         ButtonType saveButton = new ButtonType("保存设置", ButtonBar.ButtonData.OK_DONE);
@@ -538,6 +581,25 @@ public final class MainView extends BorderPane implements AutoCloseable {
         if (cancelBtn != null) {
             cancelBtn.getStyleClass().add("dialog-secondary-button");
         }
+
+        ComboBox<AppAppearanceMode> appearanceSelector = new ComboBox<>();
+        appearanceSelector.getItems().setAll(AppAppearanceMode.values());
+        appearanceSelector.setValue(appAppearanceMode);
+        appearanceSelector.setMaxWidth(Double.MAX_VALUE);
+        appearanceSelector.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(AppAppearanceMode item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getDisplayName());
+            }
+        });
+        appearanceSelector.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(AppAppearanceMode item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item.getDisplayName());
+            }
+        });
 
         List<String> availableFonts = new ArrayList<>();
         List<String> installedFonts = Font.getFamilies();
@@ -615,6 +677,14 @@ public final class MainView extends BorderPane implements AutoCloseable {
             if (font != null) {
                 previewLabel.setFont(Font.font(font, FontWeight.NORMAL, sz));
             }
+            boolean currentDark = (appearanceSelector.getValue() == AppAppearanceMode.SYSTEM)
+                    ? SystemThemeDetector.isDarkMode()
+                    : (appearanceSelector.getValue() == AppAppearanceMode.DARK);
+            TerminalTheme selectedTh = themeSelector.getValue();
+             th = (selectedTh != null) ? selectedTh.resolveEffectiveTheme(currentDark) : TerminalTheme.AUTO.resolveEffectiveTheme(currentDark);
+            if (font != null) {
+                previewLabel.setFont(Font.font(font, FontWeight.NORMAL, sz));
+            }
             if (th != null) {
                 String bgHex = String.format("#%02x%02x%02x",
                         (int) (th.background().getRed() * 255),
@@ -625,13 +695,25 @@ public final class MainView extends BorderPane implements AutoCloseable {
                         (int) (th.foreground().getGreen() * 255),
                         (int) (th.foreground().getBlue() * 255));
                 previewLabel.setStyle("-fx-background-color: " + bgHex + "; -fx-text-fill: " + fgHex
-                        + "; -fx-padding: 10px; -fx-background-radius: 6px; -fx-border-color: #3e424f; -fx-border-radius: 6px;");
+                        + "; -fx-padding: 10px; -fx-background-radius: 6px; -fx-border-color: " + (currentDark ? "#3e424f" : "#d1d1d6") + "; -fx-border-radius: 6px;");
             }
         };
         fontSelector.valueProperty().addListener((o, old, val) -> updatePreview.run());
         sizeSpinner.valueProperty().addListener((o, old, val) -> updatePreview.run());
         sizeSpinner.getEditor().textProperty().addListener((o, old, val) -> updatePreview.run());
         themeSelector.valueProperty().addListener((o, old, val) -> updatePreview.run());
+        appearanceSelector.valueProperty().addListener((o, old, val) -> {
+            if (val != null) {
+                if (val == AppAppearanceMode.LIGHT) {
+                    themeSelector.setValue(TerminalTheme.MACOS_LIGHT);
+                } else if (val == AppAppearanceMode.DARK) {
+                    themeSelector.setValue(TerminalTheme.MACOS_DARK);
+                } else {
+                    themeSelector.setValue(TerminalTheme.AUTO);
+                }
+                updatePreview.run();
+            }
+        });
         updatePreview.run();
 
         GridPane form = new GridPane();
@@ -646,6 +728,11 @@ public final class MainView extends BorderPane implements AutoCloseable {
         form.getColumnConstraints().addAll(labelColumn, inputColumn);
 
         int r = 0;
+        Label appearanceLabel = new Label("界面外观");
+        appearanceLabel.getStyleClass().add("dialog-form-label");
+        form.add(appearanceLabel, 0, r);
+        form.add(appearanceSelector, 1, r++);
+
         Label fontLabel = new Label("终端字体");
         fontLabel.getStyleClass().add("dialog-form-label");
         form.add(fontLabel, 0, r);
@@ -711,9 +798,12 @@ public final class MainView extends BorderPane implements AutoCloseable {
                 return;
             }
 
+            appAppearanceMode = appearanceSelector.getValue() != null ? appearanceSelector.getValue() : AppAppearanceMode.SYSTEM;
+            ThemeManager.setAppearanceMode(appAppearanceMode);
+
             terminalFontFamily = fontSelector.getValue();
             terminalFontSize = parseFontSize(sizeSpinner);
-            terminalTheme = themeSelector.getValue() != null ? themeSelector.getValue() : TerminalTheme.DEFAULT_DARK;
+            terminalTheme = themeSelector.getValue() != null ? themeSelector.getValue() : TerminalTheme.AUTO;
             terminalCursorStyle = cursorStyleSelector.getValue() != null ? cursorStyleSelector.getValue() : CursorStyle.BLOCK;
             terminalCursorBlink = cursorBlinkCheck.isSelected();
 
@@ -728,9 +818,11 @@ public final class MainView extends BorderPane implements AutoCloseable {
 
             sshConnectionService.setIdleTimeoutMinutes(idleMinutes);
 
+            applyEffectiveTheme(true);
+
             for (ProfileWorkspace w : profileWorkspaces.values()) {
                 w.applyFont(terminalFontFamily, terminalFontSize);
-                w.applyTerminalSettings(terminalTheme, terminalCursorStyle, terminalCursorBlink);
+                w.applyTerminalSettings(terminalTheme.resolveEffectiveTheme(isEffectiveDarkMode()), terminalCursorStyle, terminalCursorBlink);
             }
         });
     }
@@ -767,7 +859,7 @@ public final class MainView extends BorderPane implements AutoCloseable {
         applyDialogTheme(dialog);
 
         Label icon = new Label("⚡");
-        icon.setStyle("-fx-font-size: 24px; -fx-text-fill: #4c82e8;");
+        icon.getStyleClass().add("dialog-header-glyph");
         dialog.setGraphic(icon);
 
         ButtonType connectButtonType = new ButtonType(existing == null ? "连接" : "保存并连接", ButtonBar.ButtonData.OK_DONE);
@@ -1430,6 +1522,8 @@ public final class MainView extends BorderPane implements AutoCloseable {
 
     @Override
     public void close() {
+        ThemeManager.removeThemeListener(systemThemeListener);
+        SystemThemeDetector.removeListener(systemThemeListener);
         profileWorkspaces.values().forEach(ProfileWorkspace::close);
         profileWorkspaces.clear();
         sshConnectionService.close();

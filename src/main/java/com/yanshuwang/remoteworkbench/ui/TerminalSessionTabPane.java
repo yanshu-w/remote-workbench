@@ -5,6 +5,7 @@ import com.yanshuwang.remoteworkbench.monitor.SystemProbeService;
 import com.yanshuwang.remoteworkbench.ssh.SshConnectionService;
 import com.yanshuwang.remoteworkbench.ui.terminal.CursorStyle;
 import com.yanshuwang.remoteworkbench.ui.terminal.TerminalTheme;
+import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -43,7 +44,7 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
 
     private String currentFontFamily = "Menlo";
     private int currentFontSize = 14;
-    private TerminalTheme currentTheme = TerminalTheme.DEFAULT_DARK;
+    private TerminalTheme currentTheme = TerminalTheme.AUTO.resolveEffectiveTheme(ThemeManager.isDarkMode());
     private CursorStyle currentCursorStyle = CursorStyle.BLOCK;
     private boolean currentCursorBlink = true;
     private Runnable onReconnectRequested;
@@ -224,7 +225,8 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
     }
 
     public void applyTerminalSettings(TerminalTheme theme, CursorStyle cursorStyle, boolean cursorBlink) {
-        this.currentTheme = (theme != null) ? theme : TerminalTheme.DEFAULT_DARK;
+        TerminalTheme effective = (theme != null) ? theme : TerminalTheme.AUTO;
+        this.currentTheme = effective.resolveEffectiveTheme(ThemeManager.isDarkMode());
         this.currentCursorStyle = (cursorStyle != null) ? cursorStyle : CursorStyle.BLOCK;
         this.currentCursorBlink = cursorBlink;
         for (TerminalTabItem tab : tabs) {
@@ -311,11 +313,7 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
             dialog.setHeaderText("修改当前标签页名称");
             dialog.setContentText("名称：");
 
-            if (getScene() != null && getScene().getWindow() != null) {
-                dialog.initOwner(getScene().getWindow());
-            }
-            String css = getClass().getResource("/com/yanshuwang/remoteworkbench/application.css").toExternalForm();
-            dialog.getDialogPane().getStylesheets().add(css);
+            ThemeManager.applyDialogTheme(dialog, getScene() != null ? getScene().getWindow() : null);
 
             Node okBtn = dialog.getDialogPane().lookupButton(javafx.scene.control.ButtonType.OK);
             if (okBtn != null) {
