@@ -524,4 +524,26 @@ public final class TerminalBuffer {
         }
         return lines;
     }
+
+    public synchronized String getGridLineText(int r) {
+        if (r < 0 || r >= rows) {
+            return "";
+        }
+        TerminalCell[][] grid = activeGrid();
+        StringBuilder sb = new StringBuilder();
+        int lastChar = -1;
+        for (int c = 0; c < cols; c++) {
+            if (grid[r][c].getCharacter() > ' ' || grid[r][c].isContinuation()) {
+                lastChar = c;
+            }
+        }
+        for (int c = 0; c <= lastChar; c++) {
+            if (grid[r][c].isContinuation()) {
+                continue;
+            }
+            sb.append(grid[r][c].getCharacter());
+        }
+        return sb.toString();
+    }
 }
+

@@ -27,12 +27,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.prefs.Preferences;
 
 public final class TerminalSessionTabPane extends BorderPane implements AutoCloseable {
+    private static final Preferences PREFERENCES = Preferences.userNodeForPackage(TerminalSessionTabPane.class);
+
     private final HBox tabHeaderBar = new HBox(8);
     private final HBox tabList = new HBox(4);
     private final Button addTabBtn = new Button("+");
     private final MiniDashboardView miniDashboard = new MiniDashboardView();
+    private boolean serverStatusEnabled = PREFERENCES.getBoolean("server.status.enabled", false);
     private final StackPane contentContainer = new StackPane();
 
     private final List<TerminalTabItem> tabs = new ArrayList<>();
@@ -41,6 +45,11 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
     private ConnectionProfile currentProfile;
     private SshConnectionService sshService;
     private final SystemProbeService systemProbeService = new SystemProbeService();
+
+    private java.util.function.Consumer<String> onOpenInSftpRequested;
+    private java.util.function.Consumer<String> onActiveWorkingDirectoryChanged;
+    private java.util.function.Consumer<String> onActiveTerminalSizeChanged;
+    private java.util.function.Consumer<SystemProbeService.ServerMetrics> onMetricsListener;
 
     private String currentFontFamily = "Menlo";
     private int currentFontSize = 14;
@@ -65,6 +74,9 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        miniDashboard.setVisible(serverStatusEnabled);
+        miniDashboard.setManaged(serverStatusEnabled);
 
         tabHeaderBar.getChildren().addAll(tabList, addTabBtn, spacer, miniDashboard);
         setTop(tabHeaderBar);
@@ -112,6 +124,22 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
             terminalView.setOnReconnectRequested(onReconnectRequested);
         }
 
+        terminalView.setOnOpenInSftpRequested(dir -> {
+            if (onOpenInSftpRequested != null) {
+                onOpenInSftpRequested.accept(dir);
+            }
+        });
+        terminalView.setOnWorkingDirectoryChanged(dir -> {
+            if (activeTab != null && activeTab.terminalView == terminalView && onActiveWorkingDirectoryChanged != null) {
+                onActiveWorkingDirectoryChanged.accept(dir);
+            }
+        });
+        terminalView.setOnTerminalSizeChanged(sz -> {
+            if (activeTab != null && activeTab.terminalView == terminalView && onActiveTerminalSizeChanged != null) {
+                onActiveTerminalSizeChanged.accept(sz);
+            }
+        });
+
         TerminalTabItem tabItem = new TerminalTabItem(channelId, tabTitle, terminalView);
         tabs.add(tabItem);
         tabList.getChildren().add(tabItem.tabButton);
@@ -144,6 +172,13 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
 
         tabItem.terminalView.toFront();
         Platform.runLater(() -> tabItem.terminalView.setInputEnabled(true));
+
+        if (onActiveWorkingDirectoryChanged != null) {
+            onActiveWorkingDirectoryChanged.accept(tabItem.terminalView.getCurrentWorkingDirectory());
+        }
+        if (onActiveTerminalSizeChanged != null) {
+            onActiveTerminalSizeChanged.accept(tabItem.terminalView.getTerminalSize());
+        }
     }
 
     public void closeTab(TerminalTabItem tabItem) {
@@ -194,8 +229,63 @@ public final class TerminalSessionTabPane extends BorderPane implements AutoClos
             tab.terminalView.attachConnection(profile, service, tab.channelId);
         }
 
-        // Start real-time health probe
-        systemProbeService.start(profile, service, miniDashboard::updateMetrics);
+        // Always start real-time health probe (for latency, transfer speed and cwd tracking)
+        systemProbeService.start(profile, service, this::handleMetricsUpdate);
+    }
+
+    private void handleMetricsUpdate(SystemProbeService.ServerMetrics metrics) {
+        if (serverStatusEnabled) {
+            miniDashboard.updateMetrics(metrics);
+        }
+        if (metrics != null && metrics.available()) {
+            if (metrics.currentDirectory() != null && !metrics.currentDirectory().isBlank()) {
+                if (activeTab != null && activeTab.terminalView != null) {
+                    activeTab.terminalView.updateWorkingDirectory(metrics.currentDirectory());
+                }
+            }
+        }
+        if (onMetricsListener != null) {
+            onMetricsListener.accept(metrics);
+        }
+    }
+
+    public void setServerStatusEnabled(boolean enabled) {
+        this.serverStatusEnabled = enabled;
+        miniDashboard.setVisible(enabled);
+        miniDashboard.setManaged(enabled);
+        if (!enabled) {
+            miniDashboard.resetToStandby();
+        }
+    }
+
+    public void setOnOpenInSftpRequested(java.util.function.Consumer<String> listener) {
+        this.onOpenInSftpRequested = listener;
+    }
+
+    public void setOnActiveWorkingDirectoryChanged(java.util.function.Consumer<String> listener) {
+        this.onActiveWorkingDirectoryChanged = listener;
+        if (listener != null && activeTab != null) {
+            listener.accept(activeTab.terminalView.getCurrentWorkingDirectory());
+        }
+    }
+
+    public void setOnActiveTerminalSizeChanged(java.util.function.Consumer<String> listener) {
+        this.onActiveTerminalSizeChanged = listener;
+        if (listener != null && activeTab != null) {
+            listener.accept(activeTab.terminalView.getTerminalSize());
+        }
+    }
+
+    public void setOnMetricsListener(java.util.function.Consumer<SystemProbeService.ServerMetrics> listener) {
+        this.onMetricsListener = listener;
+    }
+
+    public String getActiveWorkingDirectory() {
+        return activeTab != null ? activeTab.terminalView.getCurrentWorkingDirectory() : "~";
+    }
+
+    public String getActiveTerminalSize() {
+        return activeTab != null ? activeTab.terminalView.getTerminalSize() : "100 × 32";
     }
 
     public void detach() {

@@ -45,6 +45,11 @@ public final class TerminalCanvas extends Canvas {
     private int selEndCol = -1;
     private boolean isSelecting = false;
 
+    // Link & path detection and click handlers
+    private TerminalLinkDetector.TerminalLink hoveredLink = null;
+    private java.util.function.Consumer<String> onUrlClicked;
+    private java.util.function.Consumer<String> onPathClicked;
+
     public TerminalCanvas(TerminalBuffer buffer, String fontFamily, int fontSize) {
         this.buffer = buffer;
         this.fontFamily = fontFamily;
@@ -87,6 +92,20 @@ public final class TerminalCanvas extends Canvas {
                 int col = Math.max(0, Math.min(buffer.getCols() - 1, (int) (event.getX() / charWidth)));
                 int row = Math.max(0, Math.min(buffer.getRows() - 1, (int) (event.getY() / charHeight)));
 
+                boolean isShortcut = event.isShortcutDown() || event.isMetaDown() || event.isControlDown();
+                if (isShortcut) {
+                    TerminalLinkDetector.TerminalLink link = TerminalLinkDetector.detectLinkAt(buffer, row, col);
+                    if (link != null) {
+                        if (link.type() == TerminalLinkDetector.LinkType.URL && onUrlClicked != null) {
+                            onUrlClicked.accept(link.target());
+                        } else if (link.type() == TerminalLinkDetector.LinkType.PATH && onPathClicked != null) {
+                            onPathClicked.accept(link.target());
+                        }
+                        event.consume();
+                        return;
+                    }
+                }
+
                 if (event.getClickCount() == 2) {
                     selectWordAt(row, col);
                 } else if (event.getClickCount() == 3) {
@@ -120,6 +139,36 @@ public final class TerminalCanvas extends Canvas {
                 } else {
                     requestRender();
                 }
+            }
+        });
+
+        setOnMouseMoved(event -> {
+            boolean isShortcut = event.isShortcutDown() || event.isMetaDown() || event.isControlDown();
+            if (isShortcut) {
+                int col = Math.max(0, Math.min(buffer.getCols() - 1, (int) (event.getX() / charWidth)));
+                int row = Math.max(0, Math.min(buffer.getRows() - 1, (int) (event.getY() / charHeight)));
+                TerminalLinkDetector.TerminalLink link = TerminalLinkDetector.detectLinkAt(buffer, row, col);
+                if (link != null) {
+                    if (hoveredLink == null || !hoveredLink.equals(link)) {
+                        hoveredLink = link;
+                        setCursor(Cursor.HAND);
+                        requestRender();
+                    }
+                    return;
+                }
+            }
+            if (hoveredLink != null) {
+                hoveredLink = null;
+                setCursor(Cursor.TEXT);
+                requestRender();
+            }
+        });
+
+        setOnMouseExited(event -> {
+            if (hoveredLink != null) {
+                hoveredLink = null;
+                setCursor(Cursor.TEXT);
+                requestRender();
             }
         });
 
@@ -428,6 +477,40 @@ public final class TerminalCanvas extends Canvas {
                     }
                 }
             }
+        }
+
+        // 4. Draw link/path hover highlight and underline
+        if (hoveredLink != null && hoveredLink.row() >= 0 && hoveredLink.row() < rows) {
+            int lr = hoveredLink.row();
+            double startX = hoveredLink.startCol() * charWidth;
+            double endX = (hoveredLink.endCol() + 1) * charWidth;
+            double topY = lr * charHeight;
+            double lineY = topY + charHeight - 1.5;
+
+            // Highlight background pill
+            gc.setFill(Color.rgb(56, 189, 248, 0.20));
+            gc.fillRoundRect(startX, topY, endX - startX, charHeight, 3, 3);
+
+            // Bright underline
+            gc.setStroke(Color.web("#38bdf8"));
+            gc.setLineWidth(1.4);
+            gc.strokeLine(startX, lineY, endX, lineY);
+        }
+    }
+
+    public void setOnUrlClicked(java.util.function.Consumer<String> listener) {
+        this.onUrlClicked = listener;
+    }
+
+    public void setOnPathClicked(java.util.function.Consumer<String> listener) {
+        this.onPathClicked = listener;
+    }
+
+    public void clearHoveredLink() {
+        if (hoveredLink != null) {
+            hoveredLink = null;
+            setCursor(Cursor.TEXT);
+            requestRender();
         }
     }
 

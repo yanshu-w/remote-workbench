@@ -18,9 +18,19 @@ public final class AnsiParser {
     private State state = State.NORMAL;
     private final StringBuilder paramBuffer = new StringBuilder();
     private boolean isPrivateMode = false;
+    private java.util.function.Consumer<String> workingDirectoryListener;
+    private java.util.function.Consumer<String> titleListener;
 
     public AnsiParser(TerminalBuffer buffer) {
         this.buffer = buffer;
+    }
+
+    public void setWorkingDirectoryListener(java.util.function.Consumer<String> listener) {
+        this.workingDirectoryListener = listener;
+    }
+
+    public void setTitleListener(java.util.function.Consumer<String> listener) {
+        this.titleListener = listener;
     }
 
     public synchronized void parse(String text) {
@@ -57,6 +67,7 @@ public final class AnsiParser {
                         isPrivateMode = false;
                     } else if (c == ']') {
                         state = State.OSC;
+                        paramBuffer.setLength(0);
                     } else if (c == '(' || c == ')' || c == '*' || c == '+') {
                         state = State.CHARSET;
                     } else if (c == '=' || c == '>') {
@@ -91,7 +102,46 @@ public final class AnsiParser {
                 }
                 case OSC -> {
                     if (c == '\u0007' || c == '\u001B') {
+                        handleOsc(paramBuffer.toString());
                         state = State.NORMAL;
+                    } else if (paramBuffer.length() < 2048) {
+                        paramBuffer.append(c);
+                    }
+                }
+            }
+        }
+    }
+
+    private void handleOsc(String osc) {
+        if (osc == null || osc.isEmpty()) {
+            return;
+        }
+
+        // OSC 7: Current Working Directory notification (\033]7;file://hostname/path\007)
+        if (osc.startsWith("7;")) {
+            String url = osc.substring(2).trim();
+            if (url.startsWith("file://")) {
+                int slashIdx = url.indexOf('/', "file://".length());
+                String path = slashIdx >= 0 ? url.substring(slashIdx) : url.substring("file://".length());
+                try {
+                    path = java.net.URLDecoder.decode(path, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception ignored) {
+                }
+                if (workingDirectoryListener != null && !path.isBlank()) {
+                    workingDirectoryListener.accept(path);
+                }
+            }
+        } else if (osc.startsWith("0;") || osc.startsWith("2;")) {
+            // OSC 0 / 2: Title notification (often contains current dir like "user@host: ~/projects")
+            String title = osc.substring(2).trim();
+            if (titleListener != null && !title.isBlank()) {
+                titleListener.accept(title);
+            }
+            if (title.contains(":")) {
+                String candidate = title.substring(title.indexOf(':') + 1).trim();
+                if (candidate.startsWith("/") || candidate.startsWith("~")) {
+                    if (workingDirectoryListener != null && !candidate.isBlank()) {
+                        workingDirectoryListener.accept(candidate);
                     }
                 }
             }

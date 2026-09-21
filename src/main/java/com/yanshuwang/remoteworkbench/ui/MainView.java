@@ -12,10 +12,12 @@ import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Side;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
@@ -27,6 +29,9 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ScrollPane;
@@ -38,6 +43,8 @@ import javafx.scene.control.TabPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
@@ -51,9 +58,13 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
+import com.yanshuwang.remoteworkbench.config.CommandSnippet;
+import com.yanshuwang.remoteworkbench.config.CommandSnippetService;
+import com.yanshuwang.remoteworkbench.config.SnippetExecutor;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,7 +88,8 @@ public final class MainView extends BorderPane implements AutoCloseable {
     private static final Preferences PREFERENCES = Preferences.userNodeForPackage(MainView.class);
 
     private final ObservableList<ConnectionProfile> connectionProfiles = FXCollections.observableArrayList();
-    private final ListView<ConnectionProfile> connectionList = new ListView<>(connectionProfiles);
+    private final FilteredList<ConnectionProfile> filteredConnectionProfiles = new FilteredList<>(connectionProfiles, p -> true);
+    private final ListView<ConnectionProfile> connectionList = new ListView<>(filteredConnectionProfiles);
 
     private final SshConnectionService sshConnectionService = new SshConnectionService();
     private final SftpService sftpService = new SftpService(sshConnectionService);
@@ -85,6 +97,10 @@ public final class MainView extends BorderPane implements AutoCloseable {
     private final Label activeConnectionLabel = new Label("未连接");
     private final Label statusLabel = new Label("就绪");
     private final Label connectionStatusLabel = new Label("SSH：未连接");
+    private final Label latencyLabel = new Label("⚡ - ms");
+    private final Label transferRateLabel = new Label("↑ 0 KB/s  ↓ 0 KB/s");
+    private final Label currentDirectoryLabel = new Label("📁 ~");
+    private final Label terminalSizeLabel = new Label("⊞ 100×32");
     private final Button connectButton = new Button("连接");
     private final Button disconnectButton = new Button("断开连接");
 
@@ -92,12 +108,17 @@ public final class MainView extends BorderPane implements AutoCloseable {
     private final Set<String> connectingProfileIds = ConcurrentHashMap.newKeySet();
     private final StackPane workspaceContainer = new StackPane();
     private StackPane welcomeOverlay;
+    private Label welcomeTitleLabel;
+    private Label welcomeDescriptionLabel;
+    private HBox welcomeActionsBox;
+    private TextField sidebarSearchField;
 
     private String terminalFontFamily = resolveMonospaceFont();
     private int terminalFontSize = Math.max(10, Math.min(32, PREFERENCES.getInt("terminal.font.size", 14)));
     private TerminalTheme terminalTheme = resolveTerminalTheme();
     private CursorStyle terminalCursorStyle = resolveCursorStyle();
     private boolean terminalCursorBlink = PREFERENCES.getBoolean("terminal.cursor.blink", true);
+    private boolean serverStatusEnabled = PREFERENCES.getBoolean("server.status.enabled", false);
     private ConnectionProfile selectedProfile;
 
     private AppAppearanceMode appAppearanceMode = resolveAppearanceMode();
@@ -108,6 +129,17 @@ public final class MainView extends BorderPane implements AutoCloseable {
     private VBox fullSidebar;
     private VBox slimSidebar;
     private final VBox slimServerListBox = new VBox(8);
+
+    private Dialog<?> activeSettingsDialog = null;
+    private boolean isSettingsDialogOpen = false;
+    private long lastSettingsOpenTime = 0;
+    private Dialog<?> activeSnippetDialog = null;
+    private boolean isSnippetDialogOpen = false;
+    private long lastSnippetOpenTime = 0;
+    private Dialog<?> activeConnectionDialog = null;
+    private boolean isConnectionDialogOpen = false;
+    private long lastConnectionOpenTime = 0;
+    private long lastSidebarToggleTime = 0;
 
     private static AppAppearanceMode resolveAppearanceMode() {
         return ThemeManager.getAppearanceMode();
@@ -147,8 +179,14 @@ public final class MainView extends BorderPane implements AutoCloseable {
         int savedIdleMinutes = PREFERENCES.getInt("ssh.idle.timeout.minutes", 10);
         sshConnectionService.setIdleTimeoutMinutes(savedIdleMinutes);
         sshConnectionService.setOnIdleTimeout(profileId -> Platform.runLater(() -> handleIdleTimeoutDisconnect(profileId)));
-
-        setTop(createTopBar());
+        MenuBar systemMenuBar = createSystemMenuBar();
+        boolean isMac = System.getProperty("os.name", "").toLowerCase().contains("mac");
+        if (isMac) {
+            systemMenuBar.setUseSystemMenuBar(true);
+            setTop(new VBox(systemMenuBar, createTopBar()));
+        } else {
+            setTop(createTopBar());
+        }
         initSidebars();
         setLeft(sidebarContainer);
         applySidebarState();
@@ -175,6 +213,12 @@ public final class MainView extends BorderPane implements AutoCloseable {
         ThemeManager.addThemeListener(systemThemeListener);
         SystemThemeDetector.addListener(systemThemeListener);
         applyEffectiveTheme(false);
+
+        sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                setupSceneAccelerators(newScene);
+            }
+        });
     }
 
     private Node createTopBar() {
@@ -211,6 +255,12 @@ public final class MainView extends BorderPane implements AutoCloseable {
         disconnectButton.setTooltip(new Tooltip("断开当前服务器连接"));
         disconnectButton.setOnAction(event -> disconnectSelectedConnection());
 
+//        MenuButton commandsButton = new MenuButton("常用命令");
+//        commandsButton.getStyleClass().add("secondary-button");
+//        commandsButton.setTooltip(new Tooltip("点击管理或快速执行常用运维命令"));
+//        rebuildTopBarCommandsMenu(commandsButton);
+//        CommandSnippetService.addListener(() -> Platform.runLater(() -> rebuildTopBarCommandsMenu(commandsButton)));
+
         Button settingsButton = new Button("设置");
         settingsButton.getStyleClass().add("secondary-button");
         settingsButton.setTooltip(new Tooltip("打开应用设置"));
@@ -219,7 +269,7 @@ public final class MainView extends BorderPane implements AutoCloseable {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox topBar = new HBox(14, brandBox, spacer, newConnectionButton, connectButton, disconnectButton, settingsButton);
+        HBox topBar = new HBox(12, brandBox, spacer, newConnectionButton, connectButton, disconnectButton, settingsButton);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.getStyleClass().add("top-bar");
         return topBar;
@@ -245,6 +295,64 @@ public final class MainView extends BorderPane implements AutoCloseable {
         addButton.setMaxWidth(Double.MAX_VALUE);
         addButton.setOnAction(event -> showConnectionDialog(null));
 
+        sidebarSearchField = new TextField();
+        sidebarSearchField.setPromptText("搜索连接 (名称/IP/用户)...");
+        sidebarSearchField.getStyleClass().add("sidebar-search-input");
+        sidebarSearchField.textProperty().addListener((obs, oldVal, query) -> {
+            if (query == null || query.isBlank()) {
+                filteredConnectionProfiles.setPredicate(p -> true);
+                connectionList.setPlaceholder(new Label("暂无连接"));
+            } else {
+                String q = query.trim().toLowerCase();
+                filteredConnectionProfiles.setPredicate(p ->
+                        (p.name() != null && p.name().toLowerCase().contains(q))
+                                || (p.host() != null && p.host().toLowerCase().contains(q))
+                                || (p.username() != null && p.username().toLowerCase().contains(q))
+                );
+                connectionList.setPlaceholder(new Label("未找到匹配连接"));
+            }
+            if (selectedProfile == null) {
+                updateWelcomeOverlayState();
+            }
+        });
+        sidebarSearchField.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                sidebarSearchField.clear();
+                e.consume();
+            } else if (e.getCode() == KeyCode.ENTER) {
+                if (!filteredConnectionProfiles.isEmpty()) {
+                    connectionList.getSelectionModel().select(0);
+                    connectionList.requestFocus();
+                    e.consume();
+                }
+            }
+        });
+
+        Button clearSearchBtn = new Button("✕");
+        clearSearchBtn.getStyleClass().add("sidebar-search-clear-btn");
+        clearSearchBtn.setVisible(false);
+        clearSearchBtn.setManaged(false);
+        clearSearchBtn.setOnAction(e -> {
+            sidebarSearchField.clear();
+            sidebarSearchField.requestFocus();
+        });
+        sidebarSearchField.textProperty().addListener((obs, o, text) -> {
+            boolean hasText = text != null && !text.isEmpty();
+            clearSearchBtn.setVisible(hasText);
+            clearSearchBtn.setManaged(hasText);
+        });
+
+        StackPane searchContainer = new StackPane(sidebarSearchField, clearSearchBtn);
+        StackPane.setAlignment(clearSearchBtn, Pos.CENTER_RIGHT);
+        StackPane.setMargin(clearSearchBtn, new Insets(0, 6, 0, 0));
+        searchContainer.getStyleClass().add("sidebar-search-container");
+
+        filteredConnectionProfiles.addListener((javafx.collections.ListChangeListener<ConnectionProfile>) c -> {
+            if (selectedProfile == null) {
+                updateWelcomeOverlayState();
+            }
+        });
+
         connectionList.getStyleClass().add("connection-list");
         connectionList.setPlaceholder(new Label("暂无连接"));
         connectionList.setCellFactory(list -> new ListCell<>() {
@@ -261,11 +369,19 @@ public final class MainView extends BorderPane implements AutoCloseable {
 
                 Label name = new Label(profile.name());
                 name.getStyleClass().add("connection-name");
-                String authBadge = profile.isKeyAuth() ? " [Key]" : "";
-                Label address = new Label(profile.username() + "@" + profile.host() + ":" + profile.port() + authBadge);
+
+                Label address = new Label(profile.username() + "@" + profile.host() + ":" + profile.port());
                 address.getStyleClass().add("connection-address");
 
-                Circle statusDot = new Circle(4);
+                HBox addressBox = new HBox(5, address);
+                addressBox.setAlignment(Pos.CENTER_LEFT);
+                if (profile.isKeyAuth()) {
+                    Label keyBadge = new Label("Key");
+                    keyBadge.getStyleClass().add("connection-key-badge");
+                    addressBox.getChildren().add(keyBadge);
+                }
+
+                Circle statusDot = new Circle(3.5);
                 Label statusText = new Label();
 
                 boolean isConn = sshConnectionService.isConnected(profile);
@@ -274,15 +390,15 @@ public final class MainView extends BorderPane implements AutoCloseable {
                 if (isConn) {
                     statusDot.setFill(javafx.scene.paint.Color.web("#34d399"));
                     statusText.setText("在线");
-                    statusText.setStyle("-fx-text-fill: #34d399; -fx-font-size: 11px;");
+                    statusText.getStyleClass().setAll("connection-status-text", "status-online");
                 } else if (isIng) {
                     statusDot.setFill(javafx.scene.paint.Color.web("#fbbf24"));
                     statusText.setText("连接中...");
-                    statusText.setStyle("-fx-text-fill: #fbbf24; -fx-font-size: 11px;");
+                    statusText.getStyleClass().setAll("connection-status-text", "status-connecting");
                 } else {
-                    statusDot.setFill(javafx.scene.paint.Color.web("#555865"));
+                    statusDot.setFill(javafx.scene.paint.Color.web("#808694"));
                     statusText.setText("未连接");
-                    statusText.setStyle("-fx-text-fill: #808694; -fx-font-size: 11px;");
+                    statusText.getStyleClass().setAll("connection-status-text", "status-offline");
                 }
 
                 HBox statusBadge = new HBox(4, statusDot, statusText);
@@ -302,11 +418,12 @@ public final class MainView extends BorderPane implements AutoCloseable {
                 VBox rightBox = new VBox(2, statusBadge, moreBtn);
                 rightBox.setAlignment(Pos.TOP_RIGHT);
 
-                VBox leftBox = new VBox(3, name, address);
+                VBox leftBox = new VBox(3, name, addressBox);
                 HBox.setHgrow(leftBox, Priority.ALWAYS);
 
                 HBox row = new HBox(8, leftBox, rightBox);
                 row.setAlignment(Pos.CENTER_LEFT);
+                row.getStyleClass().add("connection-card-row");
                 setText(null);
                 setGraphic(row);
                 setContextMenu(menu);
@@ -321,8 +438,8 @@ public final class MainView extends BorderPane implements AutoCloseable {
             }
         });
 
-        fullSidebar = new VBox(14, titleBar, addButton, connectionList);
-        fullSidebar.setPadding(new Insets(16, 14, 16, 14));
+        fullSidebar = new VBox(10, titleBar, addButton, searchContainer, connectionList);
+        fullSidebar.setPadding(new Insets(14, 12, 14, 12));
         fullSidebar.setPrefWidth(260);
         fullSidebar.setMinWidth(260);
         fullSidebar.setMaxWidth(260);
@@ -455,7 +572,12 @@ public final class MainView extends BorderPane implements AutoCloseable {
         }
     }
 
-    private void toggleSidebar() {
+    public void toggleSidebar() {
+        long now = System.currentTimeMillis();
+        if (now - lastSidebarToggleTime < 250) {
+            return;
+        }
+        lastSidebarToggleTime = now;
         sidebarCollapsed = !sidebarCollapsed;
         PREFERENCES.putBoolean("sidebar.collapsed", sidebarCollapsed);
         applySidebarState();
@@ -471,39 +593,116 @@ public final class MainView extends BorderPane implements AutoCloseable {
     }
 
     private Node createWorkspace() {
-        Label title = new Label("远程工作区");
-        title.getStyleClass().add("workspace-title");
+        welcomeTitleLabel = new Label("远程工作台");
+        welcomeTitleLabel.getStyleClass().add("workspace-title");
 
-        Label description = new Label("创建或选择一个连接，即可使用远程终端执行命令，或使用 SFTP 浏览、上传和下载文件。");
-        description.setWrapText(true);
-        description.getStyleClass().add("workspace-description");
+        welcomeDescriptionLabel = new Label("创建或选择一个连接，即可使用远程终端执行命令，或使用 SFTP 浏览、上传和下载文件。");
+        welcomeDescriptionLabel.setWrapText(true);
+        welcomeDescriptionLabel.setMaxWidth(620);
+        welcomeDescriptionLabel.getStyleClass().add("workspace-description");
 
-        Button createButton = new Button("创建第一个连接");
-        createButton.getStyleClass().add("primary-button");
-        createButton.setOnAction(event -> showConnectionDialog(null));
+        welcomeActionsBox = new HBox(14);
+        welcomeActionsBox.setAlignment(Pos.CENTER);
+        welcomeActionsBox.getStyleClass().add("welcome-actions-box");
 
-        VBox welcomeCard = new VBox(14, title, description, createButton);
+        Label tipLabel = new Label("💡 提示：在左侧双击连接可直接发起 SSH 会话，按 Cmd+B 可折叠/展开侧边栏。");
+        tipLabel.setWrapText(true);
+        tipLabel.getStyleClass().add("welcome-tip-label");
+
+        VBox welcomeCard = new VBox(18, welcomeTitleLabel, welcomeDescriptionLabel, welcomeActionsBox, tipLabel);
         welcomeCard.setAlignment(Pos.CENTER);
-        welcomeCard.setMaxWidth(480);
+        welcomeCard.setMaxWidth(Double.MAX_VALUE);
+        welcomeCard.setMaxHeight(Double.MAX_VALUE);
         welcomeCard.getStyleClass().add("welcome-card");
 
         welcomeOverlay = new StackPane(welcomeCard);
         welcomeOverlay.getStyleClass().add("workspace-overview");
 
+        workspaceContainer.getStyleClass().add("workspace-container");
         StackPane workspaceRoot = new StackPane(workspaceContainer, welcomeOverlay);
-        welcomeOverlay.setVisible(connectionProfiles.isEmpty());
+        updateWelcomeOverlayState();
+        welcomeOverlay.setVisible(selectedProfile == null);
         return workspaceRoot;
+    }
+
+    private void updateWelcomeOverlayState() {
+        if (welcomeTitleLabel == null || welcomeActionsBox == null) {
+            return;
+        }
+        welcomeActionsBox.getChildren().clear();
+
+        if (connectionProfiles.isEmpty()) {
+            welcomeTitleLabel.setText("欢迎使用远程工作台");
+            welcomeDescriptionLabel.setText("尚未添加任何服务器连接。你可以新建一个 SSH 连接，开启终端操作与 SFTP 文件传输。");
+
+            Button createBtn = new Button("+ 创建第一个连接");
+            createBtn.getStyleClass().addAll("primary-button", "welcome-primary-btn");
+            createBtn.setOnAction(e -> showConnectionDialog(null));
+
+            Button importBtn = new Button("导入连接配置");
+            importBtn.getStyleClass().addAll("secondary-button", "welcome-secondary-btn");
+            importBtn.setOnAction(e -> {
+                javafx.stage.Window owner = getScene() != null ? getScene().getWindow() : null;
+                importProfilesBackup(owner);
+            });
+
+            welcomeActionsBox.getChildren().addAll(createBtn, importBtn);
+        } else if (filteredConnectionProfiles.isEmpty()) {
+            welcomeTitleLabel.setText("未找到匹配的连接");
+            String searchKeyword = (sidebarSearchField != null) ? sidebarSearchField.getText().trim() : "";
+            welcomeDescriptionLabel.setText("未找到包含「" + searchKeyword + "」的主机。你可以清除搜索以查看全部连接，或直接新建连接。");
+
+            Button clearBtn = new Button("清除搜索");
+            clearBtn.getStyleClass().addAll("primary-button", "welcome-primary-btn");
+            clearBtn.setOnAction(e -> {
+                if (sidebarSearchField != null) {
+                    sidebarSearchField.clear();
+                    sidebarSearchField.requestFocus();
+                }
+            });
+
+            Button createBtn = new Button("+ 新建连接");
+            createBtn.getStyleClass().addAll("secondary-button", "welcome-secondary-btn");
+            createBtn.setOnAction(e -> showConnectionDialog(null));
+
+            welcomeActionsBox.getChildren().addAll(clearBtn, createBtn);
+        } else {
+            welcomeTitleLabel.setText("未选择连接");
+            welcomeDescriptionLabel.setText("请从左侧连接列表中选择一个主机进入工作区，也可以点击下方按钮新建连接。");
+
+            ConnectionProfile firstProfile = filteredConnectionProfiles.get(0);
+            String displayName = firstProfile.name();
+            if (displayName != null && displayName.length() > 20) {
+                displayName = displayName.substring(0, 19) + "…";
+            }
+            Button openFirstBtn = new Button("选择: " + displayName);
+            openFirstBtn.getStyleClass().addAll("primary-button", "welcome-primary-btn");
+            openFirstBtn.setTooltip(new Tooltip("选择并打开「" + firstProfile.name() + "」(" + firstProfile.host() + ")"));
+            openFirstBtn.setOnAction(e -> {
+                connectionList.getSelectionModel().select(firstProfile);
+                connectionList.scrollTo(firstProfile);
+            });
+
+            Button createBtn = new Button("+ 新建连接");
+            createBtn.getStyleClass().addAll("secondary-button", "welcome-secondary-btn");
+            createBtn.setOnAction(e -> showConnectionDialog(null));
+
+            welcomeActionsBox.getChildren().addAll(openFirstBtn, createBtn);
+        }
     }
 
     private void showWorkspaceFor(ConnectionProfile profile) {
         if (profile == null) {
             workspaceContainer.getChildren().clear();
-            welcomeOverlay.setVisible(connectionProfiles.isEmpty());
+            updateWelcomeOverlayState();
+            welcomeOverlay.setVisible(true);
             return;
         }
         ProfileWorkspace ws = getOrCreateWorkspace(profile);
         workspaceContainer.getChildren().setAll(ws.getRoot());
         welcomeOverlay.setVisible(false);
+        updateCurrentDirectoryDisplay(ws.getActiveWorkingDirectory());
+        terminalSizeLabel.setText("⊞ " + ws.getActiveTerminalSize());
     }
 
     private ProfileWorkspace getOrCreateWorkspace(ConnectionProfile profile) {
@@ -517,6 +716,24 @@ public final class MainView extends BorderPane implements AutoCloseable {
                     terminalCursorBlink
             );
             ws.setOnReconnectRequested(() -> promptConnectProfile(profile));
+            ws.setServerStatusEnabled(serverStatusEnabled);
+
+            ws.setOnActiveWorkingDirectoryChanged(dir -> {
+                if (selectedProfile != null && selectedProfile.id().equals(profile.id())) {
+                    Platform.runLater(() -> updateCurrentDirectoryDisplay(dir));
+                }
+            });
+            ws.setOnActiveTerminalSizeChanged(sz -> {
+                if (selectedProfile != null && selectedProfile.id().equals(profile.id())) {
+                    Platform.runLater(() -> terminalSizeLabel.setText("⊞ " + sz));
+                }
+            });
+            ws.setOnMetricsListener(metrics -> {
+                if (selectedProfile != null && selectedProfile.id().equals(profile.id())) {
+                    Platform.runLater(() -> updateStatusMetrics(metrics));
+                }
+            });
+
             return ws;
         });
     }
@@ -560,7 +777,24 @@ public final class MainView extends BorderPane implements AutoCloseable {
     }
 
     public void showSettingsDialog() {
+        long now = System.currentTimeMillis();
+        if (isSettingsDialogOpen || (now - lastSettingsOpenTime < 600)) {
+            if (activeSettingsDialog != null) {
+                javafx.stage.Window w = activeSettingsDialog.getDialogPane().getScene() != null
+                        ? activeSettingsDialog.getDialogPane().getScene().getWindow()
+                        : null;
+                if (w != null) {
+                    w.requestFocus();
+                }
+            }
+            return;
+        }
+
+        isSettingsDialogOpen = true;
+        lastSettingsOpenTime = now;
+
         Dialog<ButtonType> dialog = new Dialog<>();
+        activeSettingsDialog = dialog;
         dialog.setTitle("设置");
         dialog.setHeaderText("终端外观与偏好设置");
         applyDialogTheme(dialog);
@@ -772,6 +1006,15 @@ public final class MainView extends BorderPane implements AutoCloseable {
         idleBox.setAlignment(Pos.CENTER_LEFT);
         form.add(idleBox, 1, r++);
 
+        CheckBox serverStatusCheck = new CheckBox("显示服务器状态 (CPU、内存、实时网络带宽)");
+        serverStatusCheck.getStyleClass().add("dialog-form-hint");
+        serverStatusCheck.setSelected(serverStatusEnabled);
+
+        Label serverStatusLabel = new Label("服务器状态");
+        serverStatusLabel.getStyleClass().add("dialog-form-label");
+        form.add(serverStatusLabel, 0, r);
+        form.add(serverStatusCheck, 1, r++);
+
         form.add(previewTitle, 0, r);
         form.add(previewLabel, 1, r++);
 
@@ -793,38 +1036,48 @@ public final class MainView extends BorderPane implements AutoCloseable {
         dialog.getDialogPane().setMinWidth(500);
         dialog.setResultConverter(button -> button);
 
-        dialog.showAndWait().ifPresent(button -> {
-            if (button != saveButton) {
-                return;
-            }
+        try {
+            dialog.showAndWait().ifPresent(button -> {
+                if (button != saveButton) {
+                    return;
+                }
 
-            appAppearanceMode = appearanceSelector.getValue() != null ? appearanceSelector.getValue() : AppAppearanceMode.SYSTEM;
-            ThemeManager.setAppearanceMode(appAppearanceMode);
+                appAppearanceMode = appearanceSelector.getValue() != null ? appearanceSelector.getValue() : AppAppearanceMode.SYSTEM;
+                ThemeManager.setAppearanceMode(appAppearanceMode);
 
-            terminalFontFamily = fontSelector.getValue();
-            terminalFontSize = parseFontSize(sizeSpinner);
-            terminalTheme = themeSelector.getValue() != null ? themeSelector.getValue() : TerminalTheme.AUTO;
-            terminalCursorStyle = cursorStyleSelector.getValue() != null ? cursorStyleSelector.getValue() : CursorStyle.BLOCK;
-            terminalCursorBlink = cursorBlinkCheck.isSelected();
+                terminalFontFamily = fontSelector.getValue();
+                terminalFontSize = parseFontSize(sizeSpinner);
+                terminalTheme = themeSelector.getValue() != null ? themeSelector.getValue() : TerminalTheme.AUTO;
+                terminalCursorStyle = cursorStyleSelector.getValue() != null ? cursorStyleSelector.getValue() : CursorStyle.BLOCK;
+                terminalCursorBlink = cursorBlinkCheck.isSelected();
 
-            int idleMinutes = parseSpinnerValue(idleTimeoutSpinner, 10, 0, 120);
+                int idleMinutes = parseSpinnerValue(idleTimeoutSpinner, 10, 0, 120);
 
-            PREFERENCES.put("terminal.font.family", terminalFontFamily);
-            PREFERENCES.putInt("terminal.font.size", terminalFontSize);
-            PREFERENCES.put("terminal.theme", terminalTheme.id());
-            PREFERENCES.put("terminal.cursor.style", terminalCursorStyle.name());
-            PREFERENCES.putBoolean("terminal.cursor.blink", terminalCursorBlink);
-            PREFERENCES.putInt("ssh.idle.timeout.minutes", idleMinutes);
+                PREFERENCES.put("terminal.font.family", terminalFontFamily);
+                PREFERENCES.putInt("terminal.font.size", terminalFontSize);
+                PREFERENCES.put("terminal.theme", terminalTheme.id());
+                PREFERENCES.put("terminal.cursor.style", terminalCursorStyle.name());
+                PREFERENCES.putBoolean("terminal.cursor.blink", terminalCursorBlink);
+                PREFERENCES.putInt("ssh.idle.timeout.minutes", idleMinutes);
 
-            sshConnectionService.setIdleTimeoutMinutes(idleMinutes);
+                serverStatusEnabled = serverStatusCheck.isSelected();
+                PREFERENCES.putBoolean("server.status.enabled", serverStatusEnabled);
 
-            applyEffectiveTheme(true);
+                sshConnectionService.setIdleTimeoutMinutes(idleMinutes);
 
-            for (ProfileWorkspace w : profileWorkspaces.values()) {
-                w.applyFont(terminalFontFamily, terminalFontSize);
-                w.applyTerminalSettings(terminalTheme.resolveEffectiveTheme(isEffectiveDarkMode()), terminalCursorStyle, terminalCursorBlink);
-            }
-        });
+                applyEffectiveTheme(true);
+
+                for (ProfileWorkspace w : profileWorkspaces.values()) {
+                    w.applyFont(terminalFontFamily, terminalFontSize);
+                    w.applyTerminalSettings(terminalTheme.resolveEffectiveTheme(isEffectiveDarkMode()), terminalCursorStyle, terminalCursorBlink);
+                    w.setServerStatusEnabled(serverStatusEnabled);
+                }
+            });
+        } finally {
+            activeSettingsDialog = null;
+            isSettingsDialogOpen = false;
+            lastSettingsOpenTime = System.currentTimeMillis();
+        }
     }
 
     private static int parseSpinnerValue(Spinner<Integer> spinner, int fallback, int min, int max) {
@@ -841,19 +1094,107 @@ public final class MainView extends BorderPane implements AutoCloseable {
     }
 
     private Node createStatusBar() {
+        activeConnectionLabel.getStyleClass().add("status-bold");
         connectionStatusLabel.getStyleClass().add("status-muted");
+        latencyLabel.getStyleClass().add("status-badge");
+        transferRateLabel.getStyleClass().add("status-badge");
+        currentDirectoryLabel.getStyleClass().add("status-badge");
+        terminalSizeLabel.getStyleClass().add("status-badge");
+        statusLabel.getStyleClass().add("status-muted");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox statusBar = new HBox(16, activeConnectionLabel, spacer, statusLabel, connectionStatusLabel);
+        HBox leftBox = new HBox(8,
+                activeConnectionLabel,
+                createStatusSeparator(),
+                connectionStatusLabel,
+                createStatusSeparator(),
+                latencyLabel,
+                createStatusSeparator(),
+                transferRateLabel
+        );
+        leftBox.setAlignment(Pos.CENTER_LEFT);
+
+        HBox rightBox = new HBox(8,
+                currentDirectoryLabel,
+                createStatusSeparator(),
+                terminalSizeLabel,
+                createStatusSeparator(),
+                statusLabel
+        );
+        rightBox.setAlignment(Pos.CENTER_RIGHT);
+
+        HBox statusBar = new HBox(12, leftBox, spacer, rightBox);
         statusBar.setAlignment(Pos.CENTER_LEFT);
         statusBar.getStyleClass().add("status-bar");
         return statusBar;
     }
 
+    private Label createStatusSeparator() {
+        Label sep = new Label("│");
+        sep.getStyleClass().add("status-separator");
+        return sep;
+    }
+
+    private void updateCurrentDirectoryDisplay(String dir) {
+        if (dir == null || dir.isBlank()) {
+            currentDirectoryLabel.setText("📁 ~");
+            currentDirectoryLabel.setTooltip(null);
+            return;
+        }
+        currentDirectoryLabel.setText("📁 " + dir);
+        currentDirectoryLabel.setTooltip(new Tooltip("当前终端工作目录：" + dir));
+    }
+
+    private void updateStatusMetrics(com.yanshuwang.remoteworkbench.monitor.SystemProbeService.ServerMetrics metrics) {
+        if (metrics == null || !metrics.available()) {
+            latencyLabel.setText("⚡ - ms");
+            transferRateLabel.setText("↑ 0 KB/s  ↓ 0 KB/s");
+            return;
+        }
+
+        long lat = metrics.latencyMs();
+        if (lat >= 0) {
+            latencyLabel.setText(String.format("⚡ %d ms", lat));
+            latencyLabel.setTooltip(new Tooltip("SSH 往返延迟 (RTT)：" + lat + " ms"));
+        }
+
+        String upRate = formatNetworkRate(metrics.txBytesPerSec());
+        String downRate = formatNetworkRate(metrics.rxBytesPerSec());
+        transferRateLabel.setText(String.format("↑ %s  ↓ %s", upRate, downRate));
+        transferRateLabel.setTooltip(new Tooltip(String.format("网络实时吞吐量\n上行速率：%s\n下行速率：%s", upRate, downRate)));
+    }
+
+    private static String formatNetworkRate(double bytesPerSec) {
+        if (bytesPerSec < 1024) {
+            return String.format("%.0f B/s", bytesPerSec);
+        } else if (bytesPerSec < 1024 * 1024) {
+            return String.format("%.1f KB/s", bytesPerSec / 1024.0);
+        } else {
+            return String.format("%.1f MB/s", bytesPerSec / (1024.0 * 1024.0));
+        }
+    }
+
     public void showConnectionDialog(ConnectionProfile existing) {
+        long now = System.currentTimeMillis();
+        if (isConnectionDialogOpen || (now - lastConnectionOpenTime < 600)) {
+            if (activeConnectionDialog != null) {
+                javafx.stage.Window w = activeConnectionDialog.getDialogPane().getScene() != null
+                        ? activeConnectionDialog.getDialogPane().getScene().getWindow()
+                        : null;
+                if (w != null) {
+                    w.requestFocus();
+                }
+            }
+            return;
+        }
+
+        isConnectionDialogOpen = true;
+        lastConnectionOpenTime = now;
+
         Dialog<ConnectionResult> dialog = new Dialog<>();
+        activeConnectionDialog = dialog;
         dialog.setTitle(existing == null ? "新建 SSH 连接" : "编辑 SSH 连接");
         dialog.setHeaderText(existing == null ? "配置服务器连接参数" : "修改「" + existing.name() + "」的连接参数");
         applyDialogTheme(dialog);
@@ -1130,27 +1471,33 @@ public final class MainView extends BorderPane implements AutoCloseable {
             return new ConnectionResult(profile, liveSecret, shouldConnect);
         });
 
-        dialog.showAndWait().ifPresent(result -> {
-            ConnectionProfile profile = result.profile();
-            if (existing != null) {
-                int index = connectionProfiles.indexOf(existing);
-                if (index >= 0) {
-                    connectionProfiles.set(index, profile);
+        try {
+            dialog.showAndWait().ifPresent(result -> {
+                ConnectionProfile profile = result.profile();
+                if (existing != null) {
+                    int index = connectionProfiles.indexOf(existing);
+                    if (index >= 0) {
+                        connectionProfiles.set(index, profile);
+                    } else {
+                        connectionProfiles.add(profile);
+                    }
                 } else {
                     connectionProfiles.add(profile);
                 }
-            } else {
-                connectionProfiles.add(profile);
-            }
 
-            ConfigStorageService.saveConnections(connectionProfiles);
-            connectionList.getSelectionModel().select(profile);
-            welcomeOverlay.setVisible(false);
+                ConfigStorageService.saveConnections(connectionProfiles);
+                connectionList.getSelectionModel().select(profile);
+                welcomeOverlay.setVisible(false);
 
-            if (result.shouldConnect()) {
-                connectProfile(profile, result.liveSecret());
-            }
-        });
+                if (result.shouldConnect()) {
+                    connectProfile(profile, result.liveSecret());
+                }
+            });
+        } finally {
+            activeConnectionDialog = null;
+            isConnectionDialogOpen = false;
+            lastConnectionOpenTime = System.currentTimeMillis();
+        }
     }
 
     private void promptConnectProfile(ConnectionProfile profile) {
@@ -1247,7 +1594,6 @@ public final class MainView extends BorderPane implements AutoCloseable {
                 boolean wasSelected = (selectedProfile == profile);
                 connectionProfiles.remove(profile);
                 ConfigStorageService.saveConnections(connectionProfiles);
-                welcomeOverlay.setVisible(connectionProfiles.isEmpty());
 
                 if (wasSelected) {
                     if (!connectionProfiles.isEmpty()) {
@@ -1257,8 +1603,14 @@ public final class MainView extends BorderPane implements AutoCloseable {
                         showWorkspaceFor(null);
                         updateSelectionState();
                     }
-                } else if (sidebarCollapsed) {
-                    refreshSlimSidebar();
+                } else {
+                    if (selectedProfile == null) {
+                        updateWelcomeOverlayState();
+                        welcomeOverlay.setVisible(true);
+                    }
+                    if (sidebarCollapsed) {
+                        refreshSlimSidebar();
+                    }
                 }
             }
         });
@@ -1316,7 +1668,12 @@ public final class MainView extends BorderPane implements AutoCloseable {
                     }
                 }
                 ConfigStorageService.saveConnections(connectionProfiles);
-                welcomeOverlay.setVisible(connectionProfiles.isEmpty());
+                if (selectedProfile == null && !connectionProfiles.isEmpty()) {
+                    connectionList.getSelectionModel().select(0);
+                } else if (selectedProfile == null) {
+                    updateWelcomeOverlayState();
+                    welcomeOverlay.setVisible(true);
+                }
                 if (sidebarCollapsed && addedCount > 0) {
                     refreshSlimSidebar();
                 }
@@ -1466,6 +1823,10 @@ public final class MainView extends BorderPane implements AutoCloseable {
         if (selectedProfile == null) {
             activeConnectionLabel.setText("未连接");
             connectionStatusLabel.setText("SSH：未连接");
+            latencyLabel.setText("⚡ - ms");
+            transferRateLabel.setText("↑ 0 KB/s  ↓ 0 KB/s");
+            currentDirectoryLabel.setText("📁 -");
+            terminalSizeLabel.setText("⊞ -");
             statusLabel.setText("就绪");
             connectButton.setVisible(true);
             connectButton.setManaged(true);
@@ -1483,6 +1844,11 @@ public final class MainView extends BorderPane implements AutoCloseable {
         if (connected) {
             connectionStatusLabel.setText("SSH：已连接 🟢");
             statusLabel.setText("已连接至「" + selectedProfile.name() + "」");
+            ProfileWorkspace ws = profileWorkspaces.get(selectedProfile.id());
+            if (ws != null) {
+                updateCurrentDirectoryDisplay(ws.getActiveWorkingDirectory());
+                terminalSizeLabel.setText("⊞ " + ws.getActiveTerminalSize());
+            }
             connectButton.setVisible(false);
             connectButton.setManaged(false);
             disconnectButton.setVisible(true);
@@ -1491,6 +1857,8 @@ public final class MainView extends BorderPane implements AutoCloseable {
         } else if (connecting) {
             connectionStatusLabel.setText("SSH：连接中 🟡");
             statusLabel.setText("正在连接「" + selectedProfile.name() + "」...");
+            latencyLabel.setText("⚡ ... ms");
+            transferRateLabel.setText("↑ 0 KB/s  ↓ 0 KB/s");
             connectButton.setVisible(true);
             connectButton.setManaged(true);
             connectButton.setDisable(true);
@@ -1499,6 +1867,10 @@ public final class MainView extends BorderPane implements AutoCloseable {
         } else {
             connectionStatusLabel.setText("SSH：未连接");
             statusLabel.setText("已选择「" + selectedProfile.name() + "」");
+            latencyLabel.setText("⚡ - ms");
+            transferRateLabel.setText("↑ 0 KB/s  ↓ 0 KB/s");
+            currentDirectoryLabel.setText("📁 ~");
+            terminalSizeLabel.setText("⊞ 100×32");
             connectButton.setVisible(true);
             connectButton.setManaged(true);
             connectButton.setDisable(false);
@@ -1518,6 +1890,227 @@ public final class MainView extends BorderPane implements AutoCloseable {
             current = current.getCause();
         }
         return current;
+    }
+
+    public TerminalView getActiveTerminalView() {
+        if (selectedProfile == null) {
+            return null;
+        }
+        ProfileWorkspace ws = profileWorkspaces.get(selectedProfile.id());
+        return ws != null ? ws.getActiveTerminalView() : null;
+    }
+
+    private void showSnippetManagerDialog() {
+        long now = System.currentTimeMillis();
+        if (isSnippetDialogOpen || (now - lastSnippetOpenTime < 600)) {
+            if (activeSnippetDialog != null) {
+                javafx.stage.Window w = activeSnippetDialog.getDialogPane().getScene() != null
+                        ? activeSnippetDialog.getDialogPane().getScene().getWindow()
+                        : null;
+                if (w != null) {
+                    w.requestFocus();
+                }
+            }
+            return;
+        }
+
+        isSnippetDialogOpen = true;
+        lastSnippetOpenTime = now;
+
+        CommandSnippetDialog dialog = new CommandSnippetDialog(snippet -> {
+            TerminalView tv = getActiveTerminalView();
+            if (tv != null) {
+                javafx.stage.Window owner = tv.getScene() != null ? tv.getScene().getWindow() : (getScene() != null ? getScene().getWindow() : null);
+                SnippetExecutor.executeSnippet(owner, snippet, tv::sendInput);
+            }
+        });
+        activeSnippetDialog = dialog;
+        applyDialogTheme(dialog);
+        try {
+            dialog.showAndWait();
+        } finally {
+            activeSnippetDialog = null;
+            isSnippetDialogOpen = false;
+            lastSnippetOpenTime = System.currentTimeMillis();
+        }
+    }
+
+    public void setupSceneAccelerators(Scene scene) {
+        if (scene == null) {
+            return;
+        }
+        // Cmd/Ctrl+B: Toggle Sidebar
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.B, KeyCombination.SHORTCUT_DOWN),
+                this::toggleSidebar
+        );
+        // Cmd/Ctrl+,: Preferences / Settings
+        // On macOS, the system menu bar (settingsItem in MenuBar) already natively handles Cmd+,.
+        // Registering it in scene.getAccelerators() on macOS causes dual-firing.
+        boolean isMac = System.getProperty("os.name", "").toLowerCase().contains("mac");
+        if (!isMac) {
+            scene.getAccelerators().put(
+                    new KeyCodeCombination(KeyCode.COMMA, KeyCombination.SHORTCUT_DOWN),
+                    this::showSettingsDialog
+            );
+        }
+        // Cmd/Ctrl+Shift+K: Manage Snippets
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.K, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN),
+                this::showSnippetManagerDialog
+        );
+        // Cmd/Ctrl+N: New Connection
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN),
+                () -> showConnectionDialog(null)
+        );
+        // Cmd/Ctrl+Enter: Connect selected profile
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.ENTER, KeyCombination.SHORTCUT_DOWN),
+                () -> {
+                    if (selectedProfile != null && !sshConnectionService.isConnected(selectedProfile)) {
+                        promptConnectProfile(selectedProfile);
+                    }
+                }
+        );
+        // Cmd/Ctrl+Shift+D: Disconnect selected profile
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.D, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN),
+                () -> {
+                    if (selectedProfile != null) {
+                        disconnectProfile(selectedProfile);
+                    }
+                }
+        );
+    }
+
+    private MenuBar createSystemMenuBar() {
+        MenuBar menuBar = new MenuBar();
+        menuBar.setUseSystemMenuBar(true);
+
+        Menu commandMenu = new Menu("命令");
+        MenuItem manageSnippetsItem = new MenuItem("常用命令管理...");
+        manageSnippetsItem.setAccelerator(new KeyCodeCombination(KeyCode.K, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN));
+        manageSnippetsItem.setOnAction(e -> showSnippetManagerDialog());
+        commandMenu.getItems().addAll(manageSnippetsItem, new SeparatorMenuItem());
+
+        populateCommandMenuItems(commandMenu);
+
+        CommandSnippetService.addListener(() -> Platform.runLater(() -> {
+            commandMenu.getItems().clear();
+            commandMenu.getItems().addAll(manageSnippetsItem, new SeparatorMenuItem());
+            populateCommandMenuItems(commandMenu);
+        }));
+
+        Menu connectionMenu = new Menu("连接");
+        MenuItem newConnItem = new MenuItem("新建连接...");
+        newConnItem.setAccelerator(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN));
+        newConnItem.setOnAction(e -> showConnectionDialog(null));
+
+        MenuItem connectItem = new MenuItem("连接当前主机");
+        connectItem.setAccelerator(new KeyCodeCombination(KeyCode.ENTER, KeyCombination.SHORTCUT_DOWN));
+        connectItem.setOnAction(e -> {
+            if (selectedProfile != null && !sshConnectionService.isConnected(selectedProfile)) {
+                promptConnectProfile(selectedProfile);
+            }
+        });
+
+        MenuItem disconnectItem = new MenuItem("断开当前连接");
+        disconnectItem.setAccelerator(new KeyCodeCombination(KeyCode.D, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN));
+        disconnectItem.setOnAction(e -> {
+            if (selectedProfile != null) {
+                disconnectProfile(selectedProfile);
+            }
+        });
+
+        connectionMenu.getItems().addAll(newConnItem, connectItem, disconnectItem, new SeparatorMenuItem());
+
+        MenuItem importItem = new MenuItem("导入连接备份...");
+        importItem.setOnAction(e -> importProfilesBackup(getScene() != null ? getScene().getWindow() : null));
+        MenuItem exportItem = new MenuItem("导出连接备份...");
+        exportItem.setOnAction(e -> exportProfilesBackup(getScene() != null ? getScene().getWindow() : null));
+        connectionMenu.getItems().addAll(importItem, exportItem);
+
+        Menu viewMenu = new Menu("视图");
+        MenuItem toggleSidebarItem = new MenuItem("折叠/展开侧边栏");
+        toggleSidebarItem.setAccelerator(new KeyCodeCombination(KeyCode.B, KeyCombination.SHORTCUT_DOWN));
+        toggleSidebarItem.setOnAction(e -> toggleSidebar());
+
+        MenuItem settingsItem = new MenuItem("偏好设置...");
+        settingsItem.setAccelerator(new KeyCodeCombination(KeyCode.COMMA, KeyCombination.SHORTCUT_DOWN));
+        settingsItem.setOnAction(e -> showSettingsDialog());
+
+        viewMenu.getItems().addAll(toggleSidebarItem, new SeparatorMenuItem(), settingsItem);
+
+        menuBar.getMenus().addAll(commandMenu, connectionMenu, viewMenu);
+        return menuBar;
+    }
+
+    private void populateCommandMenuItems(Menu commandMenu) {
+        List<CommandSnippet> snippets = CommandSnippetService.loadSnippets();
+        Map<String, List<CommandSnippet>> grouped = new LinkedHashMap<>();
+        for (CommandSnippet s : snippets) {
+            grouped.computeIfAbsent(s.category(), k -> new ArrayList<>()).add(s);
+        }
+
+        for (Map.Entry<String, List<CommandSnippet>> entry : grouped.entrySet()) {
+            Menu subMenu = new Menu(entry.getKey());
+            for (CommandSnippet snippet : entry.getValue()) {
+                MenuItem item = new MenuItem(snippet.name());
+                item.setOnAction(e -> {
+                    TerminalView tv = getActiveTerminalView();
+                    if (tv != null) {
+                        javafx.stage.Window owner = tv.getScene() != null ? tv.getScene().getWindow() : (getScene() != null ? getScene().getWindow() : null);
+                        SnippetExecutor.executeSnippet(owner, snippet, tv::sendInput);
+                    } else {
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setTitle("未找到活动终端");
+                        alert.setHeaderText("请先打开并连接一个终端");
+                        alert.setContentText("执行常用命令「" + snippet.name() + "」需要一个处于活动连接中的终端。");
+                        applyDialogTheme(alert);
+                        alert.showAndWait();
+                    }
+                });
+                subMenu.getItems().add(item);
+            }
+            commandMenu.getItems().add(subMenu);
+        }
+    }
+
+    private void rebuildTopBarCommandsMenu(MenuButton button) {
+        button.getItems().clear();
+        MenuItem manageItem = new MenuItem("⚙ 管理常用命令...");
+        manageItem.setOnAction(e -> showSnippetManagerDialog());
+        button.getItems().addAll(manageItem, new SeparatorMenuItem());
+
+        List<CommandSnippet> snippets = CommandSnippetService.loadSnippets();
+        Map<String, List<CommandSnippet>> grouped = new LinkedHashMap<>();
+        for (CommandSnippet s : snippets) {
+            grouped.computeIfAbsent(s.category(), k -> new ArrayList<>()).add(s);
+        }
+
+        for (Map.Entry<String, List<CommandSnippet>> entry : grouped.entrySet()) {
+            Menu catMenu = new Menu(entry.getKey());
+            for (CommandSnippet snippet : entry.getValue()) {
+                MenuItem item = new MenuItem(snippet.name());
+                item.setOnAction(e -> {
+                    TerminalView tv = getActiveTerminalView();
+                    if (tv != null) {
+                        javafx.stage.Window owner = tv.getScene() != null ? tv.getScene().getWindow() : (getScene() != null ? getScene().getWindow() : null);
+                        SnippetExecutor.executeSnippet(owner, snippet, tv::sendInput);
+                    } else {
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setTitle("未找到活动终端");
+                        alert.setHeaderText("请先打开并连接一个终端");
+                        alert.setContentText("执行命令「" + snippet.name() + "」需要一个处于活动连接中的终端。");
+                        applyDialogTheme(alert);
+                        alert.showAndWait();
+                    }
+                });
+                catMenu.getItems().add(item);
+            }
+            button.getItems().add(catMenu);
+        }
     }
 
     @Override

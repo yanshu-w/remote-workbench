@@ -3,9 +3,6 @@ package com.yanshuwang.remoteworkbench;
 import com.yanshuwang.remoteworkbench.ui.MainView;
 import javafx.application.Application;
 import javafx.scene.Scene;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
 import javafx.stage.Stage;
 
 public final class RemoteWorkbenchApplication extends Application {
@@ -21,10 +18,7 @@ public final class RemoteWorkbenchApplication extends Application {
         scene.getStylesheets().add(
                 getClass().getResource("/com/yanshuwang/remoteworkbench/application.css").toExternalForm()
         );
-        scene.getAccelerators().put(
-                new KeyCodeCombination(KeyCode.COMMA, KeyCombination.SHORTCUT_DOWN),
-                mainView::showSettingsDialog
-        );
+        mainView.setupSceneAccelerators(scene);
 
         stage.setTitle("远程工作台");
         stage.setMinWidth(960);

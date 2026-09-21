@@ -17,7 +17,7 @@ import java.util.function.Consumer;
  */
 public final class SystemProbeService implements AutoCloseable {
     private static final int PROBE_INTERVAL_SECONDS = 3;
-    private static final String PROBE_COMMAND = "cat /proc/stat /proc/meminfo /proc/net/dev 2>/dev/null";
+    private static final String PROBE_COMMAND = "cat /proc/stat /proc/meminfo /proc/net/dev 2>/dev/null; echo '---CWD---'; for p in $(pgrep -u $(whoami) -x 'bash|zsh|sh' 2>/dev/null); do [ -d /proc/$p/cwd ] && readlink /proc/$p/cwd; done | tail -n 1";
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "system-probe-worker");
@@ -76,15 +76,17 @@ public final class SystemProbeService implements AutoCloseable {
             return;
         }
 
+        long startTime = System.currentTimeMillis();
         try {
             service.execute(profile, PROBE_COMMAND).whenComplete((output, error) -> {
+                long latency = Math.max(1, System.currentTimeMillis() - startTime);
                 if (error != null || output == null || output.isBlank() || !output.contains("cpu")) {
                     notifyMetrics(callback, ServerMetrics.unavailable());
                     return;
                 }
 
                 try {
-                    ServerMetrics metrics = parseMetrics(output);
+                    ServerMetrics metrics = parseMetrics(output, latency);
                     notifyMetrics(callback, metrics);
                 } catch (Exception parseException) {
                     notifyMetrics(callback, ServerMetrics.unavailable());
@@ -101,8 +103,24 @@ public final class SystemProbeService implements AutoCloseable {
         }
     }
 
-    private ServerMetrics parseMetrics(String raw) {
+    private ServerMetrics parseMetrics(String raw, long latencyMs) {
         long now = System.currentTimeMillis();
+
+        String cwd = "";
+        int cwdIndex = raw.indexOf("---CWD---");
+        if (cwdIndex >= 0) {
+            String cwdBlock = raw.substring(cwdIndex + "---CWD---".length()).trim();
+            if (!cwdBlock.isEmpty()) {
+                String[] cwdLines = cwdBlock.split("\\R");
+                for (String line : cwdLines) {
+                    line = line.trim();
+                    if (line.startsWith("/")) {
+                        cwd = line;
+                    }
+                }
+            }
+            raw = raw.substring(0, cwdIndex);
+        }
 
         double cpuPercent = 0.0;
         long memTotalBytes = 0;
@@ -218,7 +236,7 @@ public final class SystemProbeService implements AutoCloseable {
             prevTimestampMs = now;
         }
 
-        return new ServerMetrics(true, cpuPercent, memTotalBytes, memUsedBytes, memPercent, rxBytesPerSec, txBytesPerSec);
+        return new ServerMetrics(true, cpuPercent, memTotalBytes, memUsedBytes, memPercent, rxBytesPerSec, txBytesPerSec, latencyMs, cwd);
     }
 
     private static long parseMemoryKb(String line) {
@@ -245,10 +263,12 @@ public final class SystemProbeService implements AutoCloseable {
             long memUsedBytes,
             double memPercent,
             double rxBytesPerSec,
-            double txBytesPerSec
+            double txBytesPerSec,
+            long latencyMs,
+            String currentDirectory
     ) {
         public static ServerMetrics unavailable() {
-            return new ServerMetrics(false, 0, 0, 0, 0, 0, 0);
+            return new ServerMetrics(false, 0, 0, 0, 0, 0, 0, -1, "");
         }
     }
 }

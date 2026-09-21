@@ -27,6 +27,7 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
@@ -248,6 +249,16 @@ public final class SshConnectionService implements AutoCloseable {
         ActiveConnection connection = activeConnections.get(profile.id());
         if (connection != null) {
             connection.closeTerminal(channelId);
+        }
+    }
+
+    public void setTerminalCharset(ConnectionProfile profile, String channelId, Charset charset) {
+        if (profile == null || channelId == null || charset == null) {
+            return;
+        }
+        ActiveConnection connection = activeConnections.get(profile.id());
+        if (connection != null) {
+            connection.setTerminalCharset(channelId, charset);
         }
     }
 
@@ -547,7 +558,7 @@ public final class SshConnectionService implements AutoCloseable {
 
                 shellChannel.open().verify(OPERATION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-                channels.put(channelId, new TerminalChannel(shellChannel, localInput, remoteInput));
+                channels.put(channelId, new TerminalChannel(shellChannel, localInput, remoteInput, remoteOutput));
             } catch (IOException | RuntimeException exception) {
                 localInput.close();
                 remoteInput.close();
@@ -560,6 +571,13 @@ public final class SshConnectionService implements AutoCloseable {
             TerminalChannel ch = channels.remove(channelId);
             if (ch != null) {
                 ch.close();
+            }
+        }
+
+        private synchronized void setTerminalCharset(String channelId, Charset charset) {
+            TerminalChannel ch = channels.get(channelId);
+            if (ch != null) {
+                ch.setCharset(charset);
             }
         }
 
@@ -615,11 +633,23 @@ public final class SshConnectionService implements AutoCloseable {
         private final ChannelShell shell;
         private final PipedOutputStream shellInput;
         private final PipedInputStream remoteInput;
+        private final ListenerOutputStream remoteOutput;
+        private volatile Charset charset = StandardCharsets.UTF_8;
 
-        private TerminalChannel(ChannelShell shell, PipedOutputStream shellInput, PipedInputStream remoteInput) {
+        private TerminalChannel(ChannelShell shell, PipedOutputStream shellInput, PipedInputStream remoteInput, ListenerOutputStream remoteOutput) {
             this.shell = shell;
             this.shellInput = shellInput;
             this.remoteInput = remoteInput;
+            this.remoteOutput = remoteOutput;
+        }
+
+        private void setCharset(Charset newCharset) {
+            if (newCharset != null) {
+                this.charset = newCharset;
+                if (remoteOutput != null) {
+                    remoteOutput.setCharset(newCharset);
+                }
+            }
         }
 
         private boolean isOpen() {
@@ -630,7 +660,7 @@ public final class SshConnectionService implements AutoCloseable {
             if (!isOpen()) {
                 throw new IOException("SSH terminal channel is not open");
             }
-            shellInput.write(input.getBytes(StandardCharsets.UTF_8));
+            shellInput.write(input.getBytes(charset));
             shellInput.flush();
         }
 
@@ -665,7 +695,7 @@ public final class SshConnectionService implements AutoCloseable {
 
     private static final class ListenerOutputStream extends OutputStream {
         private final Consumer<String> listener;
-        private final CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+        private volatile CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPLACE)
                 .onUnmappableCharacter(CodingErrorAction.REPLACE);
         private ByteBuffer byteBuffer = ByteBuffer.allocate(8192);
@@ -673,6 +703,14 @@ public final class SshConnectionService implements AutoCloseable {
 
         private ListenerOutputStream(Consumer<String> listener) {
             this.listener = listener;
+        }
+
+        public synchronized void setCharset(Charset charset) {
+            if (charset != null) {
+                this.decoder = charset.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPLACE)
+                        .onUnmappableCharacter(CodingErrorAction.REPLACE);
+            }
         }
 
         @Override

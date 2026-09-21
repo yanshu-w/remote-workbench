@@ -292,6 +292,18 @@ public final class SftpService {
         return normalized.substring(0, lastSlash);
     }
 
+    public static String getFileName(String path) {
+        String normalized = normalizeRemotePath(path);
+        if ("/".equals(normalized)) {
+            return "/";
+        }
+        int lastSlash = normalized.lastIndexOf('/');
+        if (lastSlash < 0) {
+            return normalized;
+        }
+        return normalized.substring(lastSlash + 1);
+    }
+
     public static String joinPath(String parent, String child) {
         String normalizedParent = normalizeRemotePath(parent);
         if ("/".equals(normalizedParent)) {

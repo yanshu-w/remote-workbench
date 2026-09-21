@@ -9,12 +9,15 @@ import com.yanshuwang.remoteworkbench.ui.terminal.TerminalCanvas;
 import com.yanshuwang.remoteworkbench.ui.terminal.TerminalTheme;
 import com.yanshuwang.remoteworkbench.ui.theme.ThemeManager;
 import javafx.application.Platform;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBase;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
@@ -27,21 +30,34 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.scene.control.ContentDisplay;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.Menu;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.TextAlignment;
 import javafx.stage.FileChooser;
-
+import com.yanshuwang.remoteworkbench.config.CommandSnippet;
+import com.yanshuwang.remoteworkbench.config.CommandSnippetService;
+import com.yanshuwang.remoteworkbench.config.SnippetExecutor;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletionException;
 
 public final class TerminalView extends BorderPane {
@@ -60,6 +76,8 @@ public final class TerminalView extends BorderPane {
     private boolean isUpdatingScrollBar = false;
 
     private Pane canvasPane;
+    private final Button findButton = new Button("查找");
+    private final Pane searchOverlayPane = new Pane();
     private HBox searchBar;
     private final TextField searchField = new TextField();
     private final Label matchCountLabel = new Label("0/0");
@@ -82,6 +100,29 @@ public final class TerminalView extends BorderPane {
     private String fontFamily = "Menlo";
     private int fontSize = 14;
 
+    private final MenuButton snippetsMenu = new MenuButton("⚡ 常用命令");
+    private final Runnable snippetChangeListener = () -> Platform.runLater(this::rebuildSnippetsMenu);
+
+    private final StringBuilder currentInputLine = new StringBuilder();
+    private final ObservableList<String> commandHistory = FXCollections.observableArrayList();
+    private final FilteredList<String> filteredCommandHistory = new FilteredList<>(commandHistory, p -> true);
+
+    private boolean rightSidebarExpanded = false;
+    private VBox historyPanel;
+    private Button historyTabButton;
+    private Label historyCountBadge;
+    private ListView<String> historyListView;
+    private TextField historySearchField;
+
+    private final MenuButton encodingMenu = new MenuButton("编码: UTF-8");
+    private final Button openInSftpBtn = new Button("在 SFTP 打开");
+    private java.nio.charset.Charset currentCharset = StandardCharsets.UTF_8;
+
+    private String currentWorkingDirectory = "~";
+    private java.util.function.Consumer<String> onWorkingDirectoryChanged;
+    private java.util.function.Consumer<String> onOpenInSftpRequested;
+    private java.util.function.Consumer<String> onTerminalSizeChanged;
+
     public TerminalView() {
         this("default", "终端");
     }
@@ -91,12 +132,24 @@ public final class TerminalView extends BorderPane {
         this.tabTitle = tabTitle != null ? tabTitle : "终端";
         this.canvas = new TerminalCanvas(buffer, fontFamily, fontSize);
 
+        CommandSnippetService.addListener(snippetChangeListener);
+
         getStyleClass().add("terminal-view-root");
         setTop(createTerminalBar());
         setCenter(createCanvasContainer());
+        setRight(createRightSidebar());
 
         setupKeyboardHandlers();
         setupContextMenu();
+
+        canvas.setOnUrlClicked(this::openUrlInBrowser);
+        canvas.setOnPathClicked(path -> {
+            if (onOpenInSftpRequested != null && path != null && !path.isBlank()) {
+                onOpenInSftpRequested.accept(path.trim());
+            }
+        });
+
+        parser.setWorkingDirectoryListener(dir -> Platform.runLater(() -> updateWorkingDirectory(dir)));
 
         parser.parse("\033[90m[提示] 尚未建立 SSH 终端会话。请双击左侧连接或点击“连接”开始。\033[0m\r\n");
         canvas.requestRender();
@@ -121,6 +174,16 @@ public final class TerminalView extends BorderPane {
         }
     }
 
+    private void setupActionButton(ButtonBase btn, double minWidth) {
+        btn.getStyleClass().add("terminal-action-btn");
+        btn.setPrefHeight(26);
+        btn.setMinHeight(26);
+        btn.setMaxHeight(26);
+        if (minWidth > 0) {
+            btn.setMinWidth(minWidth);
+        }
+    }
+
     private HBox createTerminalBar() {
         iconLabel.setText("⚡ " + tabTitle);
         iconLabel.getStyleClass().add("terminal-title");
@@ -131,13 +194,12 @@ public final class TerminalView extends BorderPane {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button findButton = new Button("查找");
-        findButton.getStyleClass().add("terminal-action-btn");
+        setupActionButton(findButton, 48);
         findButton.setTooltip(new Tooltip("查找终端文本 (Cmd/Ctrl+F)"));
-        findButton.setOnAction(e -> showSearchBar());
+        findButton.setOnAction(e -> toggleSearchBar());
 
         Button copyButton = new Button("复制");
-        copyButton.getStyleClass().add("terminal-action-btn");
+        setupActionButton(copyButton, 48);
         copyButton.setTooltip(new Tooltip("有选中文字时复制选中内容，否则复制全部文本"));
         copyButton.setOnAction(e -> {
             if (canvas.hasSelection()) {
@@ -148,72 +210,85 @@ public final class TerminalView extends BorderPane {
         });
 
         Button pasteButton = new Button("粘贴");
-        pasteButton.getStyleClass().add("terminal-action-btn");
+        setupActionButton(pasteButton, 48);
         pasteButton.setTooltip(new Tooltip("粘贴剪贴板内容 (Cmd/Ctrl+V)"));
         pasteButton.setOnAction(e -> pasteClipboardText());
 
-        MenuButton shellMenu = new MenuButton("Shell");
-        shellMenu.getStyleClass().add("terminal-action-btn");
+        MenuButton shellMenu = new MenuButton("Shell: 默认");
+        setupActionButton(shellMenu, -1);
+        shellMenu.setTooltip(new Tooltip("当前 Shell 环境 (默认) - 点击切换"));
+
+        MenuItem toDefault = new MenuItem("恢复默认 Shell");
+        toDefault.setOnAction(e -> {
+            sendInput("exec $SHELL -l\r");
+            shellMenu.setText("Shell: 默认");
+        });
         MenuItem toZsh = new MenuItem("切换到 Zsh");
-        toZsh.setOnAction(e -> switchToZsh());
+        toZsh.setOnAction(e -> {
+            switchToZsh();
+            shellMenu.setText("Shell: Zsh");
+        });
         MenuItem toBash = new MenuItem("切换到 Bash");
-        toBash.setOnAction(e -> switchToBash());
+        toBash.setOnAction(e -> {
+            switchToBash();
+            shellMenu.setText("Shell: Bash");
+        });
         MenuItem toSh = new MenuItem("切换到 Sh");
-        toSh.setOnAction(e -> sendInput("exec sh -l\r"));
+        toSh.setOnAction(e -> {
+            sendInput("exec sh -l\r");
+            shellMenu.setText("Shell: Sh");
+        });
 
         MenuItem installZshDebian = new MenuItem("远端安装 Zsh (Debian/Ubuntu)");
         installZshDebian.setOnAction(e -> sendInput("sudo apt update && sudo apt install -y zsh\r"));
         MenuItem installZshCentos = new MenuItem("远端安装 Zsh (CentOS/RHEL)");
         installZshCentos.setOnAction(e -> sendInput("sudo yum install -y zsh\r"));
 
-        shellMenu.getItems().addAll(toZsh, toBash, toSh, new SeparatorMenuItem(), installZshDebian, installZshCentos);
+        shellMenu.getItems().addAll(toDefault, toZsh, toBash, toSh, new SeparatorMenuItem(), installZshDebian, installZshCentos);
 
-        MenuButton snippetsMenu = new MenuButton("⚡ 常用命令");
-        snippetsMenu.getStyleClass().add("terminal-action-btn");
-
-        MenuItem osInfo = new MenuItem("系统信息 (uname -a && cat /etc/os-release)");
-        osInfo.setOnAction(e -> sendInput("uname -a && cat /etc/os-release\r"));
-        MenuItem memInfo = new MenuItem("内存占用 (free -h)");
-        memInfo.setOnAction(e -> sendInput("free -h\r"));
-        MenuItem diskInfo = new MenuItem("磁盘占用 (df -h)");
-        diskInfo.setOnAction(e -> sendInput("df -h\r"));
-        MenuItem uptimeInfo = new MenuItem("系统负载与运行时间 (uptime)");
-        uptimeInfo.setOnAction(e -> sendInput("uptime\r"));
-
-        MenuItem topProcs = new MenuItem("高内存消耗进程 (ps aux --sort=-%mem | head -10)");
-        topProcs.setOnAction(e -> sendInput("ps aux --sort=-%mem | head -n 10\r"));
-        MenuItem logsInfo = new MenuItem("最新系统日志 (journalctl -n 50 --no-pager)");
-        logsInfo.setOnAction(e -> sendInput("journalctl -n 50 --no-pager\r"));
-
-        MenuItem ipInfo = new MenuItem("网络接口与 IP (ip addr || ifconfig)");
-        ipInfo.setOnAction(e -> sendInput("ip addr || ifconfig\r"));
-        MenuItem portInfo = new MenuItem("监听端口与服务 (ss -tulnp || netstat -tulnp)");
-        portInfo.setOnAction(e -> sendInput("ss -tulnp || netstat -tulnp\r"));
-
-        MenuItem dockerPs = new MenuItem("运行中的 Docker 容器 (docker ps)");
-        dockerPs.setOnAction(e -> sendInput("docker ps\r"));
-
-        snippetsMenu.getItems().addAll(
-                osInfo, memInfo, diskInfo, uptimeInfo,
-                new SeparatorMenuItem(),
-                topProcs, logsInfo,
-                new SeparatorMenuItem(),
-                ipInfo, portInfo,
-                new SeparatorMenuItem(),
-                dockerPs
-        );
+        setupActionButton(snippetsMenu, -1);
+        snippetsMenu.setTooltip(new Tooltip("常用运维诊断与系统状态快捷命令"));
+        rebuildSnippetsMenu();
 
         Button exportButton = new Button("导出日志");
-        exportButton.getStyleClass().add("terminal-action-btn");
+        setupActionButton(exportButton, -1);
         exportButton.setTooltip(new Tooltip("将当前终端历史记录导出为文本日志文件"));
         exportButton.setOnAction(e -> exportSessionLog());
 
         Button clearButton = new Button("清屏");
-        clearButton.getStyleClass().add("terminal-action-btn");
+        setupActionButton(clearButton, 48);
         clearButton.setTooltip(new Tooltip("清屏 (执行 clear 命令)"));
         clearButton.setOnAction(e -> clear());
 
-        HBox bar = new HBox(10, iconLabel, sizeLabel, connectionLabel, spacer, findButton, copyButton, pasteButton, exportButton, shellMenu, snippetsMenu, clearButton);
+        setupActionButton(encodingMenu, -1);
+        encodingMenu.setTooltip(new Tooltip("当前终端字符集编码 - 点击切换 (UTF-8 / GBK)"));
+        MenuItem utf8Item = new MenuItem("UTF-8 (推荐)");
+        utf8Item.setOnAction(e -> applyCharset(StandardCharsets.UTF_8, "编码: UTF-8"));
+        MenuItem gbkItem = new MenuItem("GBK (简体中文)");
+        gbkItem.setOnAction(e -> {
+            try {
+                applyCharset(java.nio.charset.Charset.forName("GBK"), "编码: GBK");
+            } catch (Exception ex) {
+                applyCharset(java.nio.charset.Charset.forName("GB18030"), "编码: GB18030");
+            }
+        });
+        MenuItem gb18030Item = new MenuItem("GB18030");
+        gb18030Item.setOnAction(e -> applyCharset(java.nio.charset.Charset.forName("GB18030"), "编码: GB18030"));
+        MenuItem big5Item = new MenuItem("Big5 (繁体中文)");
+        big5Item.setOnAction(e -> applyCharset(java.nio.charset.Charset.forName("Big5"), "编码: Big5"));
+        MenuItem isoItem = new MenuItem("ISO-8859-1 (Latin-1)");
+        isoItem.setOnAction(e -> applyCharset(StandardCharsets.ISO_8859_1, "编码: ISO-8859-1"));
+        encodingMenu.getItems().addAll(utf8Item, gbkItem, gb18030Item, big5Item, isoItem);
+
+        setupActionButton(openInSftpBtn, -1);
+        openInSftpBtn.setTooltip(new Tooltip("在 SFTP 文件管理中打开当前目录 (" + currentWorkingDirectory + ")"));
+        openInSftpBtn.setOnAction(e -> {
+            if (onOpenInSftpRequested != null) {
+                onOpenInSftpRequested.accept(currentWorkingDirectory);
+            }
+        });
+
+        HBox bar = new HBox(8, iconLabel, connectionLabel, spacer, findButton, copyButton, pasteButton, encodingMenu, openInSftpBtn, shellMenu, snippetsMenu, exportButton, clearButton);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(6, 12, 6, 12));
         bar.getStyleClass().add("terminal-top-bar");
@@ -257,15 +332,30 @@ public final class TerminalView extends BorderPane {
         mainCanvasPane.setCenter(canvasPane);
         mainCanvasPane.setRight(terminalScrollBar);
 
-        HBox searchWidget = createSearchBar();
-        StackPane.setAlignment(searchWidget, Pos.TOP_RIGHT);
-        StackPane.setMargin(searchWidget, new Insets(10, 24, 0, 0));
+        searchBar = createSearchBar();
+        searchOverlayPane.setPickOnBounds(false);
+        searchOverlayPane.getChildren().add(searchBar);
+        searchOverlayPane.widthProperty().addListener((obs, oldW, newW) -> {
+            if (searchBar != null && searchBar.isVisible()) {
+                updateSearchBarPosition();
+            }
+        });
+        searchOverlayPane.sceneProperty().addListener((obs, oldS, newS) -> {
+            if (newS != null && searchBar != null && searchBar.isVisible()) {
+                Platform.runLater(this::updateSearchBarPosition);
+            }
+        });
+        findButton.boundsInParentProperty().addListener((obs, oldB, newB) -> {
+            if (searchBar != null && searchBar.isVisible()) {
+                updateSearchBarPosition();
+            }
+        });
 
         HBox reconnectWidget = createReconnectBanner();
         StackPane.setAlignment(reconnectWidget, Pos.TOP_CENTER);
         StackPane.setMargin(reconnectWidget, new Insets(10, 0, 0, 0));
 
-        return new StackPane(mainCanvasPane, searchWidget, reconnectWidget);
+        return new StackPane(mainCanvasPane, searchOverlayPane, reconnectWidget);
     }
 
     private HBox createReconnectBanner() {
@@ -356,7 +446,7 @@ public final class TerminalView extends BorderPane {
         searchBar.setManaged(false);
 
         Label icon = new Label("🔍");
-        icon.setStyle("-fx-text-fill: #8f949f; -fx-font-size: 11px;");
+        icon.getStyleClass().add("terminal-search-icon");
 
         searchField.setPromptText("查找终端文本...");
         searchField.getStyleClass().add("terminal-search-input");
@@ -364,7 +454,12 @@ public final class TerminalView extends BorderPane {
 
         searchField.textProperty().addListener((obs, oldVal, newVal) -> performSearch(newVal));
         searchField.setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.ENTER) {
+            boolean isFindKey = (e.isMetaDown() && e.getCode() == KeyCode.F)
+                    || (e.isControlDown() && e.getCode() == KeyCode.F);
+            if (isFindKey) {
+                toggleSearchBar();
+                e.consume();
+            } else if (e.getCode() == KeyCode.ENTER) {
                 if (e.isShiftDown()) {
                     navigateMatch(-1);
                 } else {
@@ -377,7 +472,9 @@ public final class TerminalView extends BorderPane {
             }
         });
 
-        matchCountLabel.setStyle("-fx-text-fill: #8f949f; -fx-font-size: 11px;");
+        matchCountLabel.getStyleClass().add("terminal-search-count");
+        matchCountLabel.setMinWidth(46);
+        matchCountLabel.setAlignment(Pos.CENTER);
 
         Button prevBtn = new Button("↑");
         prevBtn.getStyleClass().add("search-nav-btn");
@@ -391,10 +488,58 @@ public final class TerminalView extends BorderPane {
 
         Button closeBtn = new Button("✕");
         closeBtn.getStyleClass().add("search-nav-btn");
+        closeBtn.setTooltip(new Tooltip("关闭 (ESC)"));
         closeBtn.setOnAction(e -> hideSearchBar());
 
         searchBar.getChildren().addAll(icon, searchField, matchCountLabel, prevBtn, nextBtn, closeBtn);
         return searchBar;
+    }
+
+    private void updateSearchBarPosition() {
+        if (searchBar == null || !searchBar.isVisible() || findButton.getScene() == null || searchOverlayPane.getScene() == null) {
+            return;
+        }
+
+        Bounds btnSceneBounds = findButton.localToScene(findButton.getBoundsInLocal());
+        if (btnSceneBounds == null) {
+            return;
+        }
+
+        Point2D btnOverlayPos = searchOverlayPane.sceneToLocal(btnSceneBounds.getMinX(), btnSceneBounds.getMaxY());
+        if (btnOverlayPos == null) {
+            return;
+        }
+
+        searchBar.applyCss();
+        searchBar.autosize();
+        double barWidth = searchBar.prefWidth(-1);
+        if (barWidth <= 0) {
+            barWidth = 330;
+        }
+        double barHeight = searchBar.prefHeight(-1);
+        if (barHeight <= 0) {
+            barHeight = 36;
+        }
+        searchBar.resize(barWidth, barHeight);
+
+        // Center horizontally under findButton
+        double btnCenterX = btnOverlayPos.getX() + btnSceneBounds.getWidth() / 2.0;
+        double targetX = btnCenterX - (barWidth / 2.0);
+
+        // Keep within searchOverlayPane bounds
+        double overlayWidth = searchOverlayPane.getWidth();
+        if (overlayWidth > 0) {
+            double maxX = overlayWidth - barWidth - 14;
+            if (targetX > maxX) {
+                targetX = maxX;
+            }
+            if (targetX < 14) {
+                targetX = 14;
+            }
+        }
+
+        searchBar.setLayoutX(Math.round(targetX));
+        searchBar.setLayoutY(6);
     }
 
     private void performSearch(String query) {
@@ -454,19 +599,41 @@ public final class TerminalView extends BorderPane {
         canvas.requestRender();
     }
 
-    public void showSearchBar() {
-        searchBar.setVisible(true);
-        searchBar.setManaged(true);
-        searchField.requestFocus();
-        searchField.selectAll();
-        if (!searchField.getText().isBlank()) {
-            performSearch(searchField.getText());
+    public void toggleSearchBar() {
+        if (searchBar != null && searchBar.isVisible()) {
+            hideSearchBar();
+        } else {
+            showSearchBar();
         }
     }
 
+    public void showSearchBar() {
+        if (searchBar == null) {
+            return;
+        }
+        searchBar.setVisible(true);
+        searchBar.setManaged(true);
+        if (!findButton.getStyleClass().contains("active")) {
+            findButton.getStyleClass().add("active");
+        }
+        updateSearchBarPosition();
+        Platform.runLater(() -> {
+            updateSearchBarPosition();
+            searchField.requestFocus();
+            searchField.selectAll();
+            if (!searchField.getText().isBlank()) {
+                performSearch(searchField.getText());
+            }
+        });
+    }
+
     public void hideSearchBar() {
+        if (searchBar == null) {
+            return;
+        }
         searchBar.setVisible(false);
         searchBar.setManaged(false);
+        findButton.getStyleClass().remove("active");
         canvas.clearSelection();
         if (canvasPane != null) {
             canvasPane.requestFocus();
@@ -493,6 +660,9 @@ public final class TerminalView extends BorderPane {
         if (cols != buffer.getCols() || rows != buffer.getRows()) {
             buffer.resize(cols, rows);
             sizeLabel.setText(cols + " x " + rows);
+            if (onTerminalSizeChanged != null) {
+                onTerminalSizeChanged.accept(cols + " × " + rows);
+            }
 
             if (currentProfile != null && sshService != null) {
                 sshService.resizeTerminal(currentProfile, channelId, cols, rows, (int) width, (int) height);
@@ -540,6 +710,12 @@ public final class TerminalView extends BorderPane {
                     hideReconnectBanner();
                     connectionLabel.setText("SSH 终端在线");
                     setInputEnabled(true);
+                    if (currentCharset != null && currentCharset != StandardCharsets.UTF_8) {
+                        sshService.setTerminalCharset(profile, this.channelId, currentCharset);
+                    }
+                    if (onTerminalSizeChanged != null) {
+                        onTerminalSizeChanged.accept(getTerminalSize());
+                    }
                     // Initial resize sync
                     sshService.resizeTerminal(
                             profile,
@@ -691,9 +867,40 @@ public final class TerminalView extends BorderPane {
         canvas.requestRender();
     }
 
+    private void openUrlInBrowser(String url) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
+        String cleanUrl = url.trim();
+        try {
+            if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
+                java.awt.Desktop.getDesktop().browse(new java.net.URI(cleanUrl));
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            String os = System.getProperty("os.name", "").toLowerCase();
+            if (os.contains("mac")) {
+                new ProcessBuilder("open", cleanUrl).start();
+            } else if (os.contains("win")) {
+                new ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", cleanUrl).start();
+            } else {
+                new ProcessBuilder("xdg-open", cleanUrl).start();
+            }
+        } catch (Exception ex) {
+            System.err.println("[TerminalView] 打开链接失败: " + ex.getMessage());
+        }
+    }
+
     private void setupKeyboardHandlers() {
         addEventFilter(KeyEvent.KEY_PRESSED, this::handleKeyPressed);
         addEventFilter(KeyEvent.KEY_TYPED, this::handleKeyTyped);
+        addEventFilter(KeyEvent.KEY_RELEASED, event -> {
+            if (!event.isShortcutDown() && !event.isMetaDown() && !event.isControlDown()) {
+                canvas.clearHoveredLink();
+            }
+        });
     }
 
     private void handleKeyPressed(KeyEvent event) {
@@ -701,11 +908,18 @@ public final class TerminalView extends BorderPane {
             return;
         }
 
+        // Toggle history sidebar: Cmd+Shift+H or Ctrl+Shift+H
+        if (event.isShortcutDown() && event.isShiftDown() && event.getCode() == KeyCode.H) {
+            toggleRightSidebar();
+            event.consume();
+            return;
+        }
+
         // 0. Find handling: Cmd+F on Mac or Ctrl+F on Win/Linux
         boolean isMacCmdF = event.isMetaDown() && event.getCode() == KeyCode.F;
         boolean isCtrlF = event.isControlDown() && event.getCode() == KeyCode.F;
         if (isMacCmdF || isCtrlF) {
-            showSearchBar();
+            toggleSearchBar();
             event.consume();
             return;
         }
@@ -741,6 +955,26 @@ public final class TerminalView extends BorderPane {
             pasteClipboardText();
             event.consume();
             return;
+        }
+
+        // Track command input for current session
+        if (event.getCode() == KeyCode.ENTER) {
+            String typed = currentInputLine.toString().trim();
+            currentInputLine.setLength(0);
+            if (!typed.isEmpty()) {
+                recordSessionCommand(typed);
+            } else {
+                String lineFromBuffer = extractCommandLineFromBuffer();
+                if (lineFromBuffer != null && !lineFromBuffer.isBlank()) {
+                    recordSessionCommand(lineFromBuffer);
+                }
+            }
+        } else if (event.getCode() == KeyCode.BACK_SPACE) {
+            if (currentInputLine.length() > 0) {
+                currentInputLine.deleteCharAt(currentInputLine.length() - 1);
+            }
+        } else if ((event.getCode() == KeyCode.C || event.getCode() == KeyCode.U) && event.isControlDown()) {
+            currentInputLine.setLength(0);
         }
 
         // 4. Normal terminal keys
@@ -793,6 +1027,7 @@ public final class TerminalView extends BorderPane {
                 && !event.isControlDown()
                 && !event.isAltDown()
                 && !event.isMetaDown()) {
+            currentInputLine.append(character);
             sendInput(character);
             event.consume();
         }
@@ -824,12 +1059,22 @@ public final class TerminalView extends BorderPane {
         };
     }
 
-    private void sendInput(String text) {
+    public void sendInput(String text) {
         canvas.resetCursorBlink();
         if (buffer.getScrollOffset() > 0) {
             buffer.setScrollOffset(0);
             updateScrollBar();
             canvas.requestRender();
+        }
+
+        // Record programmatic multi-char commands containing \r (e.g. from snippets)
+        if (text != null && text.contains("\r") && text.length() > 1) {
+            for (String part : text.split("[\r\n]+")) {
+                String c = part.trim();
+                if (!c.isEmpty() && !c.startsWith("\u001B")) {
+                    recordSessionCommand(c);
+                }
+            }
         }
 
         if (currentProfile == null || sshService == null || !sshService.isTerminalOpen(currentProfile, channelId)) {
@@ -868,7 +1113,11 @@ public final class TerminalView extends BorderPane {
     private void pasteClipboardText() {
         String text = Clipboard.getSystemClipboard().getString();
         if (text != null && !text.isEmpty()) {
-            sendInput(text.replace("\r\n", "\r").replace("\n", "\r"));
+            String normalized = text.replace("\r\n", "\r").replace("\n", "\r");
+            if (!normalized.contains("\r")) {
+                currentInputLine.append(normalized);
+            }
+            sendInput(normalized);
         }
     }
 
@@ -929,7 +1178,51 @@ public final class TerminalView extends BorderPane {
         canvas.setCursorBlink(cursorBlink);
     }
 
+    private void rebuildSnippetsMenu() {
+        if (snippetsMenu == null) {
+            return;
+        }
+        snippetsMenu.getItems().clear();
+
+        MenuItem manageItem = new MenuItem("⚙ 管理常用命令...");
+        manageItem.setOnAction(e -> showSnippetManagerDialog());
+        snippetsMenu.getItems().addAll(manageItem, new SeparatorMenuItem());
+
+        List<CommandSnippet> snippets = CommandSnippetService.loadSnippets();
+        Map<String, List<CommandSnippet>> grouped = new LinkedHashMap<>();
+        for (CommandSnippet s : snippets) {
+            grouped.computeIfAbsent(s.category(), k -> new ArrayList<>()).add(s);
+        }
+
+        for (Map.Entry<String, List<CommandSnippet>> entry : grouped.entrySet()) {
+            Menu catMenu = new Menu(entry.getKey());
+            for (CommandSnippet snippet : entry.getValue()) {
+                MenuItem item = new MenuItem(snippet.name());
+                item.setOnAction(e -> SnippetExecutor.executeSnippet(
+                        getScene() != null ? getScene().getWindow() : null,
+                        snippet,
+                        this::sendInput
+                ));
+                catMenu.getItems().add(item);
+            }
+            snippetsMenu.getItems().add(catMenu);
+        }
+    }
+
+    private void showSnippetManagerDialog() {
+        CommandSnippetDialog dialog = new CommandSnippetDialog(snippet ->
+                SnippetExecutor.executeSnippet(
+                        getScene() != null ? getScene().getWindow() : null,
+                        snippet,
+                        this::sendInput
+                )
+        );
+        ThemeManager.applyDialogTheme(dialog, getScene() != null ? getScene().getWindow() : null);
+        dialog.showAndWait();
+    }
+
     public void close() {
+        CommandSnippetService.removeListener(snippetChangeListener);
         detach();
         canvas.dispose();
     }
@@ -973,5 +1266,350 @@ public final class TerminalView extends BorderPane {
             pasteItem.setDisable(!Clipboard.getSystemClipboard().hasString());
             menu.show(this, event.getScreenX(), event.getScreenY());
         });
+    }
+
+    private Node createRightSidebar() {
+        HBox container = new HBox();
+        container.getStyleClass().add("terminal-right-sidebar-container");
+
+        // 1. History Drawer Panel (initially hidden)
+        historyPanel = createHistoryPanel();
+        historyPanel.setVisible(false);
+        historyPanel.setManaged(false);
+
+        // 2. Slim Sidebar Strip (Width 36px) with only one button: "历史命令"
+        VBox sidebarStrip = new VBox(8);
+        sidebarStrip.getStyleClass().add("terminal-sidebar-strip");
+        sidebarStrip.setAlignment(Pos.TOP_CENTER);
+        sidebarStrip.setPrefWidth(36);
+        sidebarStrip.setMinWidth(36);
+        sidebarStrip.setMaxWidth(36);
+
+        historyTabButton = new Button();
+        historyTabButton.getStyleClass().add("terminal-sidebar-tab-btn");
+        historyTabButton.setTooltip(new Tooltip("历史命令 (点击展开/折叠)"));
+
+        Label tabIcon = new Label("🕒");
+        tabIcon.getStyleClass().add("terminal-sidebar-tab-icon");
+
+        Label tabText = new Label("历\n史\n命\n令");
+        tabText.getStyleClass().add("terminal-sidebar-tab-text");
+        tabText.setAlignment(Pos.CENTER);
+
+        VBox tabContent = new VBox(2, tabIcon, tabText);
+        tabContent.setAlignment(Pos.CENTER);
+        historyTabButton.setGraphic(tabContent);
+        historyTabButton.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+        historyTabButton.setOnAction(e -> toggleRightSidebar());
+
+        sidebarStrip.getChildren().add(historyTabButton);
+
+        container.getChildren().addAll(historyPanel, sidebarStrip);
+        return container;
+    }
+
+    private void toggleRightSidebar() {
+        rightSidebarExpanded = !rightSidebarExpanded;
+        historyPanel.setVisible(rightSidebarExpanded);
+        historyPanel.setManaged(rightSidebarExpanded);
+        if (rightSidebarExpanded) {
+            if (!historyTabButton.getStyleClass().contains("active")) {
+                historyTabButton.getStyleClass().add("active");
+            }
+            if (historySearchField != null) {
+                historySearchField.requestFocus();
+            }
+        } else {
+            historyTabButton.getStyleClass().remove("active");
+            if (canvasPane != null) {
+                canvasPane.requestFocus();
+            }
+        }
+    }
+
+    private VBox createHistoryPanel() {
+        VBox panel = new VBox();
+        panel.getStyleClass().add("terminal-history-panel");
+        panel.setPrefWidth(260);
+        panel.setMinWidth(200);
+        panel.setMaxWidth(360);
+
+        // Header
+        Label titleLabel = new Label("历史命令");
+        titleLabel.getStyleClass().add("terminal-history-title");
+
+        historyCountBadge = new Label("0");
+        historyCountBadge.getStyleClass().add("history-count-badge");
+
+        HBox titleBox = new HBox(6, titleLabel, historyCountBadge);
+        titleBox.setAlignment(Pos.CENTER_LEFT);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button clearBtn = new Button("清空");
+        clearBtn.getStyleClass().add("terminal-history-action-btn");
+        clearBtn.setTooltip(new Tooltip("清空当前会话的历史命令"));
+        clearBtn.setOnAction(e -> {
+            commandHistory.clear();
+            updateHistoryCount();
+        });
+
+        Button collapseBtn = new Button("▶");
+        collapseBtn.getStyleClass().add("terminal-history-action-btn");
+        collapseBtn.setTooltip(new Tooltip("收起历史命令侧边栏"));
+        collapseBtn.setOnAction(e -> toggleRightSidebar());
+
+        HBox header = new HBox(8, titleBox, spacer, clearBtn, collapseBtn);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.getStyleClass().add("terminal-history-header");
+
+        // Search Bar
+        historySearchField = new TextField();
+        historySearchField.setPromptText("搜索当前会话命令...");
+        historySearchField.getStyleClass().add("sidebar-search-input");
+        historySearchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal == null || newVal.isBlank()) {
+                filteredCommandHistory.setPredicate(cmd -> true);
+            } else {
+                String q = newVal.trim().toLowerCase();
+                filteredCommandHistory.setPredicate(cmd -> cmd.toLowerCase().contains(q));
+            }
+        });
+
+        HBox searchContainer = new HBox(historySearchField);
+        searchContainer.setPadding(new Insets(6, 8, 6, 8));
+        HBox.setHgrow(historySearchField, Priority.ALWAYS);
+
+        // List View
+        historyListView = createHistoryListView();
+        VBox.setVgrow(historyListView, Priority.ALWAYS);
+
+        panel.getChildren().addAll(header, searchContainer, historyListView);
+        return panel;
+    }
+
+    private ListView<String> createHistoryListView() {
+        ListView<String> listView = new ListView<>(filteredCommandHistory);
+        listView.getStyleClass().add("terminal-history-list");
+
+        Label emptyLabel = new Label("当前会话暂无执行历史\n输入命令回车后自动记录");
+        emptyLabel.getStyleClass().add("status-muted");
+        emptyLabel.setAlignment(Pos.CENTER);
+        emptyLabel.setTextAlignment(TextAlignment.CENTER);
+        listView.setPlaceholder(emptyLabel);
+
+        listView.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    int index = getIndex() + 1;
+                    Label idxLabel = new Label(String.valueOf(index));
+                    idxLabel.getStyleClass().add("history-item-idx");
+                    idxLabel.setPrefWidth(24);
+
+                    Label cmdLabel = new Label(item);
+                    cmdLabel.getStyleClass().add("history-item-text");
+                    cmdLabel.setMaxWidth(Double.MAX_VALUE);
+                    HBox.setHgrow(cmdLabel, Priority.ALWAYS);
+
+                    HBox row = new HBox(6, idxLabel, cmdLabel);
+                    row.setAlignment(Pos.CENTER_LEFT);
+                    setGraphic(row);
+                    setTooltip(new Tooltip(item));
+                }
+            }
+        });
+
+        // Double click to execute command
+        listView.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                String selected = listView.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    sendInput(selected + "\r");
+                    if (canvasPane != null) {
+                        canvasPane.requestFocus();
+                    }
+                }
+            }
+        });
+
+        // Enter key to execute command
+        listView.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                String selected = listView.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    sendInput(selected + "\r");
+                    if (canvasPane != null) {
+                        canvasPane.requestFocus();
+                    }
+                    event.consume();
+                }
+            }
+        });
+
+        // Context menu
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem runItem = new MenuItem("⚡ 执行命令");
+        runItem.setOnAction(e -> {
+            String selected = listView.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                sendInput(selected + "\r");
+                if (canvasPane != null) {
+                    canvasPane.requestFocus();
+                }
+            }
+        });
+
+        MenuItem insertItem = new MenuItem("📋 填入终端 (不回车)");
+        insertItem.setOnAction(e -> {
+            String selected = listView.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                sendInput(selected);
+                if (canvasPane != null) {
+                    canvasPane.requestFocus();
+                }
+            }
+        });
+
+        MenuItem copyItem = new MenuItem("📄 复制命令");
+        copyItem.setOnAction(e -> {
+            String selected = listView.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                ClipboardContent content = new ClipboardContent();
+                content.putString(selected);
+                Clipboard.getSystemClipboard().setContent(content);
+            }
+        });
+
+        MenuItem deleteItem = new MenuItem("🗑 从历史中移除");
+        deleteItem.setOnAction(e -> {
+            String selected = listView.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                commandHistory.remove(selected);
+                updateHistoryCount();
+            }
+        });
+
+        contextMenu.getItems().addAll(runItem, insertItem, copyItem, new SeparatorMenuItem(), deleteItem);
+        listView.setContextMenu(contextMenu);
+
+        return listView;
+    }
+
+    public void recordSessionCommand(String cmd) {
+        if (cmd == null) {
+            return;
+        }
+        String trimmed = cmd.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+
+        if (trimmed.equals("cd") || trimmed.equals("cd ~")) {
+            Platform.runLater(() -> updateWorkingDirectory("~"));
+        } else if (trimmed.startsWith("cd ")) {
+            String target = trimmed.substring(3).trim();
+            if ((target.startsWith("\"") && target.endsWith("\"")) || (target.startsWith("'") && target.endsWith("'"))) {
+                target = target.substring(1, target.length() - 1);
+            }
+            if (target.startsWith("/") || target.startsWith("~")) {
+                String finalTarget = target;
+                Platform.runLater(() -> updateWorkingDirectory(finalTarget));
+            }
+        }
+
+        Platform.runLater(() -> {
+            if (!commandHistory.isEmpty() && commandHistory.get(commandHistory.size() - 1).equals(trimmed)) {
+                return;
+            }
+            commandHistory.add(trimmed);
+            updateHistoryCount();
+            if (historyListView != null) {
+                historyListView.scrollTo(commandHistory.size() - 1);
+            }
+        });
+    }
+
+    private void updateHistoryCount() {
+        if (historyCountBadge != null) {
+            historyCountBadge.setText(String.valueOf(commandHistory.size()));
+        }
+    }
+
+    public String getCurrentWorkingDirectory() {
+        return currentWorkingDirectory;
+    }
+
+    public void updateWorkingDirectory(String dir) {
+        if (dir == null || dir.isBlank()) {
+            return;
+        }
+        this.currentWorkingDirectory = dir.trim();
+        openInSftpBtn.setTooltip(new Tooltip("在 SFTP 文件管理中打开当前目录 (" + currentWorkingDirectory + ")"));
+        if (onWorkingDirectoryChanged != null) {
+            onWorkingDirectoryChanged.accept(currentWorkingDirectory);
+        }
+    }
+
+    public void setOnWorkingDirectoryChanged(java.util.function.Consumer<String> listener) {
+        this.onWorkingDirectoryChanged = listener;
+        if (listener != null && currentWorkingDirectory != null) {
+            listener.accept(currentWorkingDirectory);
+        }
+    }
+
+    public void setOnOpenInSftpRequested(java.util.function.Consumer<String> listener) {
+        this.onOpenInSftpRequested = listener;
+    }
+
+    public String getTerminalSize() {
+        return buffer.getCols() + " × " + buffer.getRows();
+    }
+
+    public void setOnTerminalSizeChanged(java.util.function.Consumer<String> listener) {
+        this.onTerminalSizeChanged = listener;
+        if (listener != null) {
+            listener.accept(getTerminalSize());
+        }
+    }
+
+    public void applyCharset(java.nio.charset.Charset charset, String label) {
+        if (charset == null) {
+            return;
+        }
+        this.currentCharset = charset;
+        if (label != null) {
+            this.encodingMenu.setText(label);
+        }
+        if (currentProfile != null && sshService != null) {
+            sshService.setTerminalCharset(currentProfile, channelId, charset);
+        }
+    }
+
+    private String extractCommandLineFromBuffer() {
+        int r = buffer.getCursorRow();
+        String line = buffer.getGridLineText(r);
+        if (line == null || line.isBlank()) {
+            return null;
+        }
+        int promptIdx = -1;
+        for (String delim : new String[]{"$ ", "# ", "% ", "> "}) {
+            int idx = line.lastIndexOf(delim);
+            if (idx > promptIdx) {
+                promptIdx = idx + delim.length();
+            }
+        }
+        if (promptIdx >= 0 && promptIdx < line.length()) {
+            String cmd = line.substring(promptIdx).trim();
+            if (!cmd.isEmpty()) {
+                return cmd;
+            }
+        }
+        return null;
     }
 }

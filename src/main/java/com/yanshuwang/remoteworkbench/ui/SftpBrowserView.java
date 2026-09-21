@@ -21,9 +21,12 @@ import javafx.scene.layout.Region;
 import javafx.stage.FileChooser;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public final class SftpBrowserView extends BorderPane {
     private final ObservableList<RemoteFileItem> fileItems = FXCollections.observableArrayList();
@@ -40,6 +43,7 @@ public final class SftpBrowserView extends BorderPane {
     private ConnectionProfile currentProfile;
     private SftpService sftpService;
     private String currentPath = "/";
+    private String defaultHomePath = "/";
 
     public SftpBrowserView() {
         getStyleClass().add("sftp-browser");
@@ -47,6 +51,10 @@ public final class SftpBrowserView extends BorderPane {
         setCenter(createTableView());
         setBottom(createStatusBar());
         setControlsEnabled(false);
+    }
+
+    public String getCurrentPath() {
+        return currentPath;
     }
 
     private HBox createToolBar() {
@@ -296,9 +304,11 @@ public final class SftpBrowserView extends BorderPane {
         sftpService.resolveDefaultDirectory(profile).whenComplete((homePath, error) -> {
             Platform.runLater(() -> {
                 if (error != null) {
+                    defaultHomePath = "/";
                     navigateTo("/");
                 } else {
-                    navigateTo(homePath);
+                    defaultHomePath = (homePath != null && !homePath.isBlank()) ? homePath : "/";
+                    navigateTo(defaultHomePath);
                 }
             });
         });
@@ -310,17 +320,35 @@ public final class SftpBrowserView extends BorderPane {
         fileItems.clear();
         pathField.setText("/");
         currentPath = "/";
+        defaultHomePath = "/";
         itemCountLabel.setText("暂无文件");
         statusLabel.setText("未连接");
         setControlsEnabled(false);
     }
 
-    private void navigateTo(String path) {
+    private String resolveHomePath(String path) {
+        if (path == null || path.isBlank()) {
+            return "/";
+        }
+        String trimmed = path.trim();
+        if (trimmed.equals("~")) {
+            return (defaultHomePath != null && !defaultHomePath.isBlank()) ? defaultHomePath : "/";
+        } else if (trimmed.startsWith("~/")) {
+            String base = (defaultHomePath != null && !defaultHomePath.isBlank()) ? defaultHomePath : "";
+            if (base.endsWith("/")) {
+                base = base.substring(0, base.length() - 1);
+            }
+            return base + trimmed.substring(1);
+        }
+        return trimmed;
+    }
+
+    public void navigateTo(String path) {
         if (currentProfile == null || sftpService == null) {
             return;
         }
 
-        String targetPath = SftpService.normalizeRemotePath(path);
+        String targetPath = SftpService.normalizeRemotePath(resolveHomePath(path));
         statusLabel.setText("正在加载目录...");
         progressBar.setProgress(-1);
         progressBar.setVisible(true);
@@ -338,6 +366,60 @@ public final class SftpBrowserView extends BorderPane {
                     fileItems.setAll(items);
                     updateItemStats(items);
                     statusLabel.setText("就绪");
+                }
+            });
+        });
+    }
+
+    public void navigateToAndSelect(String path) {
+        if (currentProfile == null || sftpService == null || path == null || path.isBlank()) {
+            return;
+        }
+
+        String targetPath = SftpService.normalizeRemotePath(resolveHomePath(path));
+        statusLabel.setText("正在定位路径...");
+        progressBar.setProgress(-1);
+        progressBar.setVisible(true);
+
+        // 1. Try listing as a directory
+        sftpService.listDirectory(currentProfile, targetPath).whenComplete((items, error) -> {
+            Platform.runLater(() -> {
+                if (error == null) {
+                    progressBar.setVisible(false);
+                    currentPath = targetPath;
+                    pathField.setText(currentPath);
+                    fileItems.setAll(items);
+                    updateItemStats(items);
+                    statusLabel.setText("就绪");
+                } else {
+                    // 2. If listing fails, target might be a file; list its parent and select the file!
+                    String parent = SftpService.getParentDirectory(targetPath);
+                    String fileName = SftpService.getFileName(targetPath);
+
+                    sftpService.listDirectory(currentProfile, parent).whenComplete((parentItems, parentErr) -> {
+                        Platform.runLater(() -> {
+                            progressBar.setVisible(false);
+                            if (parentErr == null) {
+                                currentPath = parent;
+                                pathField.setText(currentPath);
+                                fileItems.setAll(parentItems);
+                                updateItemStats(parentItems);
+                                statusLabel.setText("已定位文件：" + fileName);
+
+                                for (RemoteFileItem item : parentItems) {
+                                    if (item.name().equals(fileName)) {
+                                        tableView.getSelectionModel().select(item);
+                                        tableView.scrollTo(item);
+                                        break;
+                                    }
+                                }
+                            } else {
+                                statusLabel.setText("无法访问路径");
+                                showError("打开路径失败", "无法读取远程路径：" + targetPath, error.getMessage());
+                                pathField.setText(currentPath);
+                            }
+                        });
+                    });
                 }
             });
         });
@@ -594,14 +676,87 @@ public final class SftpBrowserView extends BorderPane {
             return;
         }
 
+        List<File> filesToUpload = new ArrayList<>(files);
+        if (targetRemoteDir != null && targetRemoteDir.equals(currentPath)) {
+            Set<String> existingNames = fileItems.stream()
+                    .map(RemoteFileItem::name)
+                    .collect(Collectors.toSet());
+
+            List<File> conflictFiles = files.stream()
+                    .filter(f -> existingNames.contains(f.getName()))
+                    .toList();
+
+            if (!conflictFiles.isEmpty()) {
+                Alert conflictAlert = new Alert(Alert.AlertType.CONFIRMATION);
+                conflictAlert.setTitle("文件冲突提示");
+                conflictAlert.setHeaderText("目标目录已存在同名文件");
+
+                String content;
+                if (conflictFiles.size() == 1) {
+                    content = "远程目录已存在同名文件「" + conflictFiles.get(0).getName() + "」。\n是否覆盖该文件？";
+                } else {
+                    String names = conflictFiles.stream().limit(3).map(File::getName).collect(Collectors.joining("、"));
+                    if (conflictFiles.size() > 3) {
+                        names += " 等 " + conflictFiles.size() + " 个项目";
+                    }
+                    content = "发现 " + conflictFiles.size() + " 个同名冲突文件（" + names + "）。\n是否覆盖这些文件？";
+                }
+                conflictAlert.setContentText(content);
+
+                ButtonType overwriteBtn = new ButtonType("覆盖", ButtonBar.ButtonData.OK_DONE);
+                ButtonType cancelBtn = new ButtonType("取消上传", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+                if (files.size() > conflictFiles.size()) {
+                    ButtonType skipBtn = new ButtonType("跳过冲突", ButtonBar.ButtonData.OTHER);
+                    conflictAlert.getButtonTypes().setAll(overwriteBtn, skipBtn, cancelBtn);
+                    applyDialogTheme(conflictAlert);
+
+                    Node overNode = conflictAlert.getDialogPane().lookupButton(overwriteBtn);
+                    if (overNode != null) overNode.getStyleClass().add("dialog-primary-button");
+                    Node skipNode = conflictAlert.getDialogPane().lookupButton(skipBtn);
+                    if (skipNode != null) skipNode.getStyleClass().add("dialog-secondary-button");
+                    Node cancelNode = conflictAlert.getDialogPane().lookupButton(cancelBtn);
+                    if (cancelNode != null) cancelNode.getStyleClass().add("dialog-secondary-button");
+
+                    Optional<ButtonType> result = conflictAlert.showAndWait();
+                    if (result.isEmpty() || result.get() == cancelBtn) {
+                        statusLabel.setText("已取消上传");
+                        return;
+                    }
+                    if (result.get() == skipBtn) {
+                        Set<String> conflictNames = conflictFiles.stream().map(File::getName).collect(Collectors.toSet());
+                        filesToUpload.removeIf(f -> conflictNames.contains(f.getName()));
+                        if (filesToUpload.isEmpty()) {
+                            statusLabel.setText("已跳过所有冲突文件");
+                            return;
+                        }
+                    }
+                } else {
+                    conflictAlert.getButtonTypes().setAll(overwriteBtn, cancelBtn);
+                    applyDialogTheme(conflictAlert);
+
+                    Node overNode = conflictAlert.getDialogPane().lookupButton(overwriteBtn);
+                    if (overNode != null) overNode.getStyleClass().add("dialog-primary-button");
+                    Node cancelNode = conflictAlert.getDialogPane().lookupButton(cancelBtn);
+                    if (cancelNode != null) cancelNode.getStyleClass().add("dialog-secondary-button");
+
+                    Optional<ButtonType> result = conflictAlert.showAndWait();
+                    if (result.isEmpty() || result.get() == cancelBtn) {
+                        statusLabel.setText("已取消上传");
+                        return;
+                    }
+                }
+            }
+        }
+
         progressBar.setProgress(-1);
         progressBar.setVisible(true);
-        statusLabel.setText("准备上传 " + files.size() + " 个项目...");
+        statusLabel.setText("准备上传 " + filesToUpload.size() + " 个项目...");
 
         CompletableFuture.runAsync(() -> {
-            int total = files.size();
+            int total = filesToUpload.size();
             for (int i = 0; i < total; i++) {
-                File file = files.get(i);
+                File file = filesToUpload.get(i);
                 int index = i + 1;
                 Platform.runLater(() -> statusLabel.setText(String.format("正在上传 (%d/%d): %s...", index, total, file.getName())));
                 try {
